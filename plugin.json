@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "codex-pulse",
+  "version": "0.6.18-beta.5",
+  "description": "Floating Windows strip for local current-conversation usage and estimated average TPS.",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Codex Pulse",
+        "shortDescription": "跟随当前对话的 Token 用量与平均 TPS 统计条",
+        "longDescription": "单行悬浮统计条：跟随当前本地会话，弹层展开时自动避让。左侧把手直接拖动，右侧按钮打开设置，中间区域默认鼠标穿透。可选择指标，保留字号和位置，支持本地版本回退。",
+        "developerName": "Local",
+        "category": "Productivity",
+        "capabilities": [
+          "Read"
+        ],
+        "composerIcon": "./assets/pulse.svg",
+        "logo": "./assets/pulse.svg"
+      }
+    }
+  }
+}
