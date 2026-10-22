@@ -8,7 +8,7 @@ import time
 import uuid
 import zipfile
 
-EXTRA_FILES = {"LICENSE", "CONTRIBUTING.md", "VALIDATION.md", "README.md", "CHANGELOG.md", "BETA_GUIDE.md", "RELEASE_NOTES.md", "plugin.json", "index.html", "launch.cmd", "回退上一版本.cmd"}
+EXTRA_FILES = {"README.en.md", "LICENSE", "CONTRIBUTING.md", "VALIDATION.md", "README.md", "CHANGELOG.md", "BETA_GUIDE.md", "RELEASE_NOTES.md", "plugin.json", "index.html", "launch.cmd", "回退上一版本.cmd"}
 
 
 def digest(data):

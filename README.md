@@ -1,5 +1,7 @@
 # Codex Pulse
 
+简体中文 | [English](README.en.md)
+
 Windows 上的本地 Codex 会话统计条。查看 Token 用量、平均 TPS 估算、缓存命中率、上下文占用及轮次/请求数。
 
 **当前版本：0.6.18-beta.5 · Beta 预发布**。主要支持 Windows 11 x64；需要 Python 3.10+（包含 Tkinter）和 Windows PowerShell。运行时无需 API Key 或第三方 Python 包。
@@ -67,6 +69,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build_native.ps1
 未构建 DLL 仍可使用半透明底。正常使用建议下载 Releases 中已含 x64 DLL 的 Windows 安装包。
 
 开发与测试见 [CONTRIBUTING.md](CONTRIBUTING.md)，设计约定见 [DESIGN.md](DESIGN.md)。
+
+## 相关项目
+
+- [codex-statusbar](https://github.com/dongyue-19/codex-statusbar)：Windows Codex 工具栏 TPS、Token 与缓存统计。
+- [codex-monitor-hud](https://github.com/LH-03/codex-monitor-hud)：Windows 上的 Codex Desktop / CLI 多任务 HUD。
+- [CodexBar](https://github.com/steipete/CodexBar)：提供商额度、重置时间等监控，包含 macOS 与 Linux 桌面界面。
+- [ccusage](https://github.com/ccusage/ccusage)：本地编码代理用量与估算成本的命令行分析。
+
+这些是独立项目，统计口径与集成方式可能不同，列出不表示兼容或集成。
 
 ## 反馈
 
