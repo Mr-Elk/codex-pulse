@@ -1,7 +1,9 @@
 """A persistent, read-only Windows UIA helper, separate from metric collection."""
 import json
+import os
 from pathlib import Path
 import queue
+import re
 import subprocess
 import threading
 import time
@@ -25,6 +27,18 @@ def parse_context(value):
     return rect, value.get("chat_title"), value.get("chat_status", "unavailable"), interaction if type(interaction) is bool else None
 
 
+def context_metadata(value):
+    """Only the navigation title and named-composer evidence classify a page."""
+    if not isinstance(value, dict):
+        return {"page_kind": "unknown", "composer_status": "unavailable"}
+    composer, title, status, _ = parse_context(value)
+    non_work = status == "ok" and isinstance(title, str) and re.fullmatch(
+        r"(?:个人资料|个人主页|设置|归档|Profile|Settings|Archived)(?:\s*[-–—|·]\s*(?:ChatGPT|Codex))?", title.strip(), re.I)
+    return {"page_kind": "non_work" if non_work else "work" if composer is not None else "unknown",
+            "composer_status": "found" if composer is not None else
+            "absent" if value.get("composer_status") == "absent" else "unavailable"}
+
+
 class PersistentProbe:
     def __init__(self, script=None, command_factory=None):
         self.script = script or Path(__file__).with_name("composer_anchor.ps1")
@@ -39,6 +53,8 @@ class PersistentProbe:
         self.response_at = 0
         self.started_at = 0
         self.avoid_rect = None
+        self.ignored_own_elements = 0
+        self.metadata = context_metadata(None)
 
     @staticmethod
     def _read(process, responses):
@@ -58,7 +74,7 @@ class PersistentProbe:
         self.close()
         command = self.command_factory(hwnd) if self.command_factory else [
             "powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(self.script),
-            "-WindowHandle", str(hwnd), "-IncludeChat", "-Watch"]
+            "-WindowHandle", str(hwnd), "-IncludeChat", "-Watch", "-IgnoreProcessId", str(os.getpid())]
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
                                         bufsize=1, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
@@ -81,11 +97,14 @@ class PersistentProbe:
         except queue.Empty:
             # Keep waiting for this same request and process on the next call.
             # Observation timeout alone does not trigger duplicate probes.
+            self.metadata = context_metadata(None)
             return None, None, "unavailable", None
         self.inflight = False
         self.response_at = time.monotonic()
         self.last_latency_ms = round((self.response_at - self.started_at) * 1000, 1)
         self.avoid_rect = None
+        self.metadata = context_metadata(value)
+        self.ignored_own_elements = value.get('ignored_own_elements',0) if isinstance(value,dict) and type(value.get('ignored_own_elements',0)) is int else 0
         if isinstance(value,dict):
             rect,_,_,_ = parse_context({"composer":value.get("popup_bounds")})
             self.avoid_rect = rect

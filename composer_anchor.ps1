@@ -1,8 +1,16 @@
-﻿param([Parameter(Mandatory=$true)][long]$WindowHandle, [switch]$Diagnostics, [switch]$IncludeChat, [switch]$Watch)
+﻿param([Parameter(Mandatory=$true)][long]$WindowHandle, [switch]$Diagnostics, [switch]$IncludeChat, [switch]$Watch, [long]$IgnoreProcessId = 0)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+function Test-PulseComposerWrapper($parentBounds,$bounds,$windowRect,$maxHeight) {
+    # The Edit reports scrollable text extent; its height may exceed the visible
+    # shell. The shell includes the bottom controls, independent of text length.
+    return ($parentBounds.Width -ge $bounds.Width -and $parentBounds.Width -le $bounds.Width+150 -and
+        $parentBounds.Height -ge 60 -and $parentBounds.Height -le $maxHeight -and
+        $parentBounds.Bottom -ge $bounds.Bottom+25 -and
+        $parentBounds.Top -ge ($windowRect.Top+$windowRect.Height*0.5) -and $parentBounds.Bottom -le $windowRect.Bottom)
+}
 function Get-PulseContext {
     $rootElement = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]$WindowHandle)
     $windowRect = $rootElement.Current.BoundingRectangle
@@ -54,19 +62,19 @@ function Get-PulseContext {
     $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
     $elements = $rootElement.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
     $composerMatches = @()
+    $composerScanReliable = $true
     $candidates = @()
     $ancestorRects = @()
     foreach ($element in $elements) {
         try {
             $bounds = $element.Current.BoundingRectangle
             if ($element.Current.IsOffscreen -or $bounds.IsEmpty) { continue }
-            if ($bounds.Width -lt 180 -or $bounds.Height -lt 15 -or $bounds.Height -gt $maxHeight) { continue }
-            if ($bounds.Top -lt ($windowRect.Top + $windowRect.Height * 0.5)) { continue }
-            if ($bounds.Bottom -gt $windowRect.Bottom) { continue }
-            # Use only an accessible label to distinguish the message composer. Never
-            # access ValuePattern/TextPattern or return draft/conversation content.
+            # Use only an accessible label; never inspect draft values or text.
             $isComposer = $element.Current.Name -match '(?i)(发送消息|创建任务|发消息|Message Codex|Send a message|Ask Codex|Message ChatGPT|Ask anything|^使用 ChatGPT Work$)'
-            $candidate = [pscustomobject]@{ left=[int]$bounds.Left; top=[int]$bounds.Top; right=[int]$bounds.Right; bottom=[int]$bounds.Bottom }
+            if ($bounds.Width -lt 180 -or $bounds.Height -lt 15 -or $bounds.Bottom -gt $windowRect.Bottom) { continue }
+            $editVisible = $bounds.Height -le $maxHeight -and $bounds.Top -ge ($windowRect.Top+$windowRect.Height*0.5)
+            if (-not $isComposer -and -not $editVisible) { continue }
+            $candidate = if ($editVisible) { [pscustomobject]@{ left=[int]$bounds.Left; top=[int]$bounds.Top; right=[int]$bounds.Right; bottom=[int]$bounds.Bottom } } else { $null }
             $parent = $element
             $wrapper = $null
             for ($depth=0; $depth -lt 8; $depth++) {
@@ -75,15 +83,16 @@ function Get-PulseContext {
                 $parentBounds = $parent.Current.BoundingRectangle
                 if ($parentBounds.IsEmpty) { continue }
                 $ancestorRects += [pscustomobject]@{ left=[int]$parentBounds.Left; top=[int]$parentBounds.Top; right=[int]$parentBounds.Right; bottom=[int]$parentBounds.Bottom }
-                if ($parentBounds.Width -ge $bounds.Width -and $parentBounds.Width -le $bounds.Width+150 -and $parentBounds.Height -ge $bounds.Height+25 -and $parentBounds.Height -le $maxHeight -and $parentBounds.Top -ge ($windowRect.Top+$windowRect.Height*0.5) -and $parentBounds.Bottom -le $windowRect.Bottom) {
+                if (Test-PulseComposerWrapper $parentBounds $bounds $windowRect $maxHeight) {
                     $wrapper = [pscustomobject]@{ left=[int]$parentBounds.Left; top=[int]$parentBounds.Top; right=[int]$parentBounds.Right; bottom=[int]$parentBounds.Bottom }
                 }
             }
             if ($null -ne $wrapper) { $candidate = $wrapper }
+            if ($null -eq $candidate) { continue }
             $candidates += $candidate
             if (-not $isComposer) { continue }
             $composerMatches += $candidate
-        } catch { continue }
+        } catch { $composerScanReliable = $false; continue }
     }
     if ($Diagnostics) { [pscustomobject]@{ edit_count=$elements.Count; candidates=$candidates; named_matches=$composerMatches.Count; ancestors=$ancestorRects } | ConvertTo-Json -Compress; return }
     $composer = $null
@@ -95,6 +104,7 @@ function Get-PulseContext {
         # Inspect roles, rectangles and expanded state only. Never read popup labels,
         # draft values, message bodies, slider values or selection contents.
         $interactionOpen = $false
+        $ignoredOwnElements = 0
         $popupBounds = $null
         $interactionReliable = $true
         $popupConditions = @()
@@ -113,6 +123,12 @@ function Get-PulseContext {
             foreach ($popup in $popupElements) {
                 try {
                     $current = $popup.Current
+                    # Our owned strip, blur host and tooltip are UIA descendants
+                    # of the target too. Never treat them as a host popover.
+                    if ($IgnoreProcessId -gt 0 -and $current.ProcessId -eq $IgnoreProcessId) {
+                        $ignoredOwnElements++
+                        continue
+                    }
                     $bounds = $current.BoundingRectangle
                     if ($current.IsOffscreen -or $bounds.IsEmpty -or $bounds.Width -le 0 -or $bounds.Height -le 0) { continue }
                     $type = $current.ControlType
@@ -147,7 +163,8 @@ function Get-PulseContext {
             }
         } catch { $interactionReliable = $false }
         if (-not $interactionOpen -and -not $interactionReliable) { $interactionOpen = $null }
-        [pscustomobject]@{composer=$composer; composer_source=$composerSource; chat_title=$chatTitle; chat_status=$chatStatus; interaction_open=$interactionOpen;popup_bounds=$popupBounds} | ConvertTo-Json -Compress -Depth 3
+        $composerStatus = if ($null -ne $composer) { 'found' } elseif ($composerScanReliable) { 'absent' } else { 'unavailable' }
+        [pscustomobject]@{composer=$composer; composer_source=$composerSource; composer_status=$composerStatus; chat_title=$chatTitle; chat_status=$chatStatus; interaction_open=$interactionOpen;popup_bounds=$popupBounds;ignored_own_elements=$ignoredOwnElements} | ConvertTo-Json -Compress -Depth 3
     } elseif ($null -ne $composer) { $composer | ConvertTo-Json -Compress }
     else { 'null' }
 }
