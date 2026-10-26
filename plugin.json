@@ -1,14 +1,14 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "codex-pulse",
-  "version": "0.6.18-beta.5",
-  "description": "Floating Windows strip for local current-conversation usage and estimated average TPS.",
+  "version": "0.7.0-beta.10",
+  "description": "Windows companion for local Codex session statistics and read-only account quotas.",
   "extensions": {
     "com.openai": {
       "interface": {
         "displayName": "Codex Pulse",
-        "shortDescription": "跟随当前对话的 Token 用量与平均 TPS 统计条",
-        "longDescription": "单行悬浮统计条：跟随当前本地会话，弹层展开时自动避让。左侧把手直接拖动，右侧按钮打开设置，中间区域默认鼠标穿透。可选择指标，保留字号和位置，支持本地版本回退。",
+        "shortDescription": "会话统计、账户额度与自然重置时间",
+        "longDescription": "毛玻璃悬浮统计条：自动跟随或固定工作会话，查看账户额度、自然重置、重置卡状态及最近用量，支持指标筛选、自定义提醒和本地回退。",
         "developerName": "Local",
         "category": "Productivity",
         "capabilities": [

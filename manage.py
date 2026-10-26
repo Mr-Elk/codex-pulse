@@ -16,6 +16,9 @@ import release_tools
 from runtime_state import atomic_json, health, read_json
 
 BASE = Path(__file__).resolve().parent
+RECOVERY_VERSION = "0.7.0-beta.6"
+RECOVERY_SHA256 = "0bb7da9b8db9c6f045b9135350d4cc3a01fa6786810acf33c6a8951f61abb077"
+BLOCKED_ROLLBACK_VERSIONS = {"0.7.0-beta.5"}
 
 
 def installation(root):
@@ -83,19 +86,39 @@ def stop(root, timeout=8):
     raise ValueError("Overlay did not exit; upgrade/rollback was not started")
 
 
-def install(archive, root):
+def install(archive, root, recovery_archive=None):
     manifest = release_tools.verify_archive(archive)
     root, marker, previous = installation(root)
     folder = version_dir(root, manifest["version"])
+    recovery = None
+    if recovery_archive is not None:
+        recovery_archive = Path(recovery_archive)
+        recovery = release_tools.verify_archive(recovery_archive)
+        if (recovery.get("version") != RECOVERY_VERSION or
+                hashlib.sha256(recovery_archive.read_bytes()).hexdigest() != RECOVERY_SHA256):
+            raise ValueError("Recovery archive is not the verified beta.6 baseline; installation was preserved")
+        if recovery["version"] == manifest["version"]:
+            raise ValueError("Recovery baseline must differ from the new candidate")
+    # Validate every existing version before stopping the running candidate.
     if previous.get("current"):
         verify_version(root, previous["current"])
-        stop(root)
     if folder.exists():
         verify_version(root, manifest["version"])
         existing = read_json(folder / "release-manifest.json")
         if existing["files"] != manifest["files"]:
             raise ValueError("This version already exists with different package contents")
-    else:
+    if recovery is not None:
+        recovery_folder = version_dir(root, recovery["version"])
+        if recovery_folder.exists():
+            verify_version(root, recovery["version"])
+            if read_json(recovery_folder / "release-manifest.json")["files"] != recovery["files"]:
+                raise ValueError("Existing recovery version differs; preserve its edits before installing")
+    if previous.get("current"):
+        stop(root)
+    if recovery is not None and not recovery_folder.exists():
+        release_tools.install_archive(recovery_archive, recovery_folder, root / "backups")
+        atomic_json(recovery_folder / "release-manifest.json", recovery)
+    if not folder.exists():
         release_tools.install_archive(archive, folder, root / "backups")
         atomic_json(folder / "release-manifest.json", manifest)
     root.mkdir(parents=True, exist_ok=True)
@@ -109,9 +132,15 @@ def install(archive, root):
         if target.exists():
             shutil.copy2(target, backup / name)
         shutil.copy2(BASE / name, target)
+    previous_version = recovery["version"] if recovery is not None else (
+        previous.get("current") if previous.get("current") != manifest["version"] else previous.get("previous"))
+    if previous_version in BLOCKED_ROLLBACK_VERSIONS:
+        previous_version = None
     value = {"name": "codex-pulse-beta", "current": manifest["version"],
-             "previous": previous.get("current") if previous.get("current") != manifest["version"] else previous.get("previous"),
+             "previous": previous_version,
              "python": sys.executable}
+    if recovery is not None:
+        value["recovery_baseline"] = recovery["version"]
     # Publish the active pointer last. All preceding writes are recoverable.
     atomic_json(marker, value)
     for name, action in (("启动统计条.cmd", "launch"), ("回退上一版.cmd", "rollback"), ("检查运行状态.cmd", "status")):
@@ -132,6 +161,8 @@ def rollback(root, dry_run=False):
     root, marker, current = installation(root)
     if not current.get("previous"):
         raise ValueError("No previous beta version; current installation was preserved")
+    if current["previous"] in BLOCKED_ROLLBACK_VERSIONS:
+        raise ValueError("Previous beta.5 has a known Escape-exit defect; use the installer with verified beta.6 recovery. Current installation was preserved")
     verify_version(root, current["current"])
     verify_version(root, current["previous"])
     if not dry_run:
@@ -148,7 +179,7 @@ def launch(root, extra=()):
     command = [current["python"], "-X", "utf8", "-B", str(entry),
                "--settings-file", str(root / "data" / "settings.json"),
                "--status-file", str(root / "data" / "runtime.json"), *extra]
-    return subprocess.call(command)
+    return subprocess.call(command,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
 
 
 def main():
@@ -157,7 +188,10 @@ def main():
     parser.add_argument("archive", nargs="?", type=Path)
     parser.add_argument("--target", type=Path, required=True)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--recovery-archive", type=Path)
     args, extra = parser.parse_known_args()
+    if args.recovery_archive is not None and args.action != "install":
+        parser.error("--recovery-archive is only valid for install")
     if extra and args.action != "launch":
         parser.error("Unknown arguments")
     if args.action == "launch":
@@ -165,7 +199,7 @@ def main():
     if args.action == "install":
         if args.archive is None:
             parser.error("install requires an archive")
-        result = install(args.archive, args.target)
+        result = install(args.archive, args.target, recovery_archive=args.recovery_archive)
     elif args.action == "rollback":
         result = rollback(args.target, args.dry_run)
     elif args.action == "stop":

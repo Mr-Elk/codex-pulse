@@ -1,11 +1,15 @@
 import json
 from pathlib import Path
 import tempfile
+import shutil
+import subprocess
+import sys
+import time
 import unittest
 from unittest.mock import patch
 
 import manage
-from release_tools import build_archive
+from release_tools import build_archive,install_archive
 from runtime_state import read_json
 
 
@@ -60,3 +64,42 @@ class BetaInstallTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"Invalid package version"):
                 manage.version_dir(root,"../outside")
             self.assertEqual(list(target.iterdir()),[target/"note.txt"])
+
+    @unittest.skipUnless(sys.platform=='win32','Legacy rollback entry requires Windows PowerShell')
+    def test_plugin_rollback_uses_supervisor_when_present_and_keeps_old_version_fallback(self):
+        for supervised in (True,False):
+            with self.subTest(supervised=supervised),tempfile.TemporaryDirectory() as folder:
+                root=Path(folder);controller=root/'controller';controller.mkdir()
+                shutil.copy2(Path(__file__).with_name('release_tools.py'),controller/'release_tools.py')
+                target=root/'source';target.mkdir()
+                old=b'{"name":"codex-pulse","version":"0.6.17"}'
+                (target/'plugin.json').write_bytes(old)
+                archive=self.package(root,'0.6.18-beta.5')
+                record=install_archive(archive,target,root/'backups')
+                codex=root/'codex-home';cache=codex/'plugins'/'cache'/'qa'/'codex-pulse'/'0.6.17';cache.mkdir(parents=True)
+                (cache/'plugin.json').write_bytes(old)
+                marker=root/'started.json'
+                writer="import json,sys\nfrom pathlib import Path\nPath("+repr(str(marker))+").write_text(json.dumps({'entry':Path(__file__).name,'args':sys.argv[1:]}),encoding='utf-8')\n"
+                (cache/'overlay.py').write_text(writer,encoding='utf-8')
+                if supervised:(cache/'launch.py').write_text(writer,encoding='utf-8')
+                cli=root/'fake_cli.py'
+                listing={'installed':[{'pluginId':'codex-pulse@qa','name':'codex-pulse','marketplaceName':'qa','version':'0.6.17'}]}
+                cli.write_text('import json\nprint(json.dumps('+repr(listing)+'))\n',encoding='utf-8')
+                cli_entry=root/'fake_codex.cmd'
+                cli_entry.write_text('@echo off\r\n"'+sys.executable+'" -X utf8 -B "'+str(cli)+'" %*\r\n',encoding='utf-8')
+                receipt={'python_path':sys.executable,'pythonw_path':sys.executable,'codex_cli':str(cli_entry),
+                         'rollback_record':str(record),'plugin_selector':'codex-pulse@qa','marketplace':'qa',
+                         'codex_home':str(codex),'previous_version':'0.6.17',
+                         'status_file':str(root/'runtime.json'),'settings_file':str(root/'settings.json')}
+                path=controller/'latest.json';path.write_text(json.dumps(receipt),encoding='utf-8')
+                completed=subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',
+                                          str(Path(__file__).with_name('rollback.ps1')),'-Receipt',str(path)],
+                                         capture_output=True,timeout=20)
+                self.assertEqual(completed.returncode,0,completed.stderr.decode(errors='replace'))
+                deadline=time.monotonic()+4
+                while not marker.exists() and time.monotonic()<deadline:time.sleep(.02)
+                started=read_json(marker)
+                self.assertEqual(started['entry'],'launch.py' if supervised else 'overlay.py')
+                self.assertIn(str(root/'settings.json'),started['args'])
+                self.assertIn(str(root/'runtime.json'),started['args'])
+                self.assertEqual((target/'plugin.json').read_bytes(),old)

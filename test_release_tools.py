@@ -115,6 +115,24 @@ class ReleaseTests(unittest.TestCase):
                 install_archive(archive, target, root / "backups")
             self.assertEqual({file.name: file.read_bytes() for file in target.iterdir()}, before)
 
+    def test_windows_aliases_and_file_directory_conflicts_are_rejected_before_install(self):
+        invalid=(('overlay.py','OVERLAY.py'),('assets/icon.svg','assets/icon.svg.'),
+                 ('NUL.txt',),('assets/./icon.svg',),('assets','assets/icon.svg'),
+                 ('assets/x?.svg',),('assets/icon.svg ',))
+        for names in invalid:
+            with self.subTest(names=names),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory);archive=root/'invalid.zip'
+                files={'plugin.json':b'{"name":"codex-pulse","version":"0.6.0"}'}
+                files.update({name:str(i).encode() for i,name in enumerate(names)})
+                manifest={'name':'codex-pulse','version':'0.6.0','files':{n:digest(v) for n,v in files.items()}}
+                with zipfile.ZipFile(archive,'w') as package:
+                    for name,data in files.items():package.writestr(name,data)
+                    package.writestr('release-manifest.json',json.dumps(manifest))
+                with self.assertRaises(ValueError):
+                    install_archive(archive,root/'target',root/'backups')
+                self.assertFalse((root/'target').exists())
+                self.assertFalse((root/'backups').exists())
+
 
 if __name__ == "__main__":
     unittest.main()

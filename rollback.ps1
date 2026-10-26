@@ -56,5 +56,7 @@ foreach ($value in @($pulsePlugin.name, $pulsePlugin.marketplaceName, $pulsePlug
 $pulseCache = Join-Path $pulseReceipt.codex_home ('plugins\cache\' + $pulsePlugin.marketplaceName + '\' + $pulsePlugin.name + '\' + $pulsePlugin.version)
 $pulseManifest = Get-Content -Raw -LiteralPath (Join-Path $pulseCache 'plugin.json') -Encoding UTF8 | ConvertFrom-Json
 if ($pulseManifest.version -ne $pulseReceipt.previous_version) { throw '回退版本不符，停止自动启动。' }
-Start-Process -WindowStyle Hidden -FilePath $pulseReceipt.pythonw_path -ArgumentList @('-B',('"' + (Join-Path $pulseCache 'overlay.py') + '"'),'--status-file',('"' + $pulseReceipt.status_file + '"'),'--settings-file',('"' + $pulseReceipt.settings_file + '"'))
+$pulseEntry = Join-Path $pulseCache 'launch.py'
+if (-not (Test-Path -LiteralPath $pulseEntry)) { $pulseEntry = Join-Path $pulseCache 'overlay.py' }
+Start-Process -WindowStyle Hidden -FilePath $pulseReceipt.pythonw_path -ArgumentList @('-X','utf8','-B',('"' + $pulseEntry + '"'),'--status-file',('"' + $pulseReceipt.status_file + '"'),'--settings-file',('"' + $pulseReceipt.settings_file + '"'))
 Write-Output ('已回退到 ' + $pulseManifest.version + '，保留当前字号和位置设置。')

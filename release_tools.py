@@ -3,12 +3,13 @@ import argparse
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import time
 import uuid
 import zipfile
 
-EXTRA_FILES = {"README.en.md", "LICENSE", "CONTRIBUTING.md", "VALIDATION.md", "README.md", "CHANGELOG.md", "BETA_GUIDE.md", "RELEASE_NOTES.md", "plugin.json", "index.html", "launch.cmd", "回退上一版本.cmd"}
+EXTRA_FILES = {"UI_RULES.html", "MACOS.md", "QUOTA_VALIDATION.md", "README.en.md", "LICENSE", "CONTRIBUTING.md", "VALIDATION.md", "README.md", "CHANGELOG.md", "BETA_GUIDE.md", "RELEASE_NOTES.md", "plugin.json", "index.html", "launch.cmd", "回退上一版本.cmd"}
 
 
 def digest(data):
@@ -54,18 +55,34 @@ def verify_archive(path):
         names = archive.namelist()
         if len(names) != len(set(names)):
             raise ValueError("Duplicate package entries")
+        canonical = set()
         for name in names:
             relative = PurePosixPath(name)
-            if relative.is_absolute() or ".." in relative.parts or "\\" in name or ":" in name or name.endswith("/"):
+            if (not relative.parts or relative.is_absolute() or ".." in relative.parts or relative.as_posix() != name
+                    or any(part.rstrip(" .") != part or re.search(r'[<>:"\\|?*\x00-\x1f]',part)
+                           or re.fullmatch(r'(?i)(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?',part)
+                           for part in relative.parts)):
                 raise ValueError("Invalid package path")
+            key = name.casefold()
+            if key in canonical:
+                raise ValueError("Ambiguous Windows package paths")
+            canonical.add(key)
+        if any(parent.as_posix().casefold() in canonical for name in names
+               for parent in PurePosixPath(name).parents if parent != PurePosixPath('.')):
+            raise ValueError("A package file is also used as a directory")
+        if not {"release-manifest.json","plugin.json"} <= set(names):
+            raise ValueError("Package metadata is missing")
         manifest = json.loads(archive.read("release-manifest.json"))
-        if manifest.get("name") != "codex-pulse" or set(names) != set(manifest["files"]) | {"release-manifest.json"}:
+        if (not isinstance(manifest,dict) or manifest.get("name") != "codex-pulse"
+                or not isinstance(manifest.get("files"),dict)
+                or set(names) != set(manifest["files"]) | {"release-manifest.json"}):
             raise ValueError("Package manifest differs from files")
         for name, expected in manifest["files"].items():
             if digest(archive.read(name)) != expected:
                 raise ValueError(f"Package checksum mismatch: {name}")
         plugin = json.loads(archive.read("plugin.json"))
-        if (plugin.get("name"), plugin.get("version")) != (manifest["name"], manifest["version"]):
+        if (not isinstance(plugin,dict) or
+                (plugin.get("name"), plugin.get("version")) != (manifest["name"], manifest.get("version"))):
             raise ValueError("Package version mismatch")
         return manifest
 
