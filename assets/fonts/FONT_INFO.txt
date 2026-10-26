@@ -1,0 +1,13 @@
+Noto Sans SC static compatibility faces for Codex Pulse.
+Original: NotoSansSC-VF.ttf, version 2.004, locally installed Windows font.
+Copyright (c) 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.
+License: SIL Open Font License 1.1 (OFL.txt).
+Source project: https://github.com/notofonts/noto-cjk
+Adaptation: instantiated at weights 400 and 600 using fontTools, renamed to
+Noto Sans SC Pulse to avoid collisions in legacy Windows font mapping.
+The original outlines, full character coverage and hinting are retained.
+The fontTools package is a build-time tool only; no runtime dependency added.
+These faces are registered privately for this process, never installed globally.
+
+The legacy Bold slot uses true 600 semibold outlines to match UI headings and
+keep compact statistical numbers legible without overpowering the icons.
