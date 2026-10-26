@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import threading
 import hashlib
+import time
 
 
 class QuotaSourceError(Exception):
@@ -43,10 +44,14 @@ class CodexQuotaSource:
         if process is None:raise QuotaSourceError("账户连接已关闭")
         self.serial += 1
         identity = self.serial
+        deadline = time.monotonic() + self.timeout
         process.stdin.write(json.dumps({"id":identity,"method":method,"params":params or {}})+"\n")
         process.stdin.flush()
         while True:
-            try:response=self.messages.get(timeout=self.timeout)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise QuotaSourceError("读取额度超时，请稍后刷新")
+            try:response=self.messages.get(timeout=remaining)
             except queue.Empty:raise QuotaSourceError("读取额度超时，请稍后刷新") from None
             if response is None:raise QuotaSourceError("本机账户连接已断开")
             if response.get("id") != identity:continue
@@ -113,12 +118,34 @@ class CodexQuotaSource:
         process,self.process=self.process,None
         if process is None:return
         try:
-            if process.stdin:process.stdin.close()
-            process.wait(timeout=.5)
-        except (OSError,ValueError,subprocess.TimeoutExpired):
-            if process.poll() is None:
-                process.terminate()
-                try:process.wait(timeout=2)
-                except subprocess.TimeoutExpired:pass
+            if process.stdin:
+                try:
+                    process.stdin.close()
+                except (OSError, ValueError):
+                    # A peer may already have closed its pipe; wait/reap below
+                    # still determines whether the owned process actually exited.
+                    pass
+            try:
+                process.wait(timeout=.5)
+            except subprocess.TimeoutExpired:
+                try:
+                    process.terminate()
+                except OSError:
+                    if process.poll() is None:
+                        raise
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    try:
+                        process.kill()
+                    except OSError:
+                        if process.poll() is None:
+                            raise
+                    process.wait(timeout=2)
         finally:
-            if process.stdout:process.stdout.close()
+            if process.poll() is None:
+                # Preserve ownership for diagnosis/retry; closing a pipe while
+                # its reader blocks on a live child can hang the caller.
+                self.process=process
+            elif process.stdout:
+                process.stdout.close()

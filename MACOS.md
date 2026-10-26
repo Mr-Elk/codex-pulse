@@ -18,6 +18,12 @@
 
 ## 可复用的本机后端
 
+共享核心开发入口已按工程规范整理：quota_config 维护配置规则，session_titles 与 active_chat 负责纯标题/绑定规则，settings_store 统一设置读写，quota_source 管理带截止时间的本机协议和所属子进程。Windows 界面继续复用这些模块，旧配置及既有配置导入入口保留兼容。
+
+在源码根目录先运行 [CONTRIBUTING.md 的共享核心回归](CONTRIBUTING.md#共享核心回归)。该组不需要 Windows、Tk 或原生材质库，使用隔离文件、数据库与子进程；Windows 上通过该组只能说明本地共享逻辑正常，Mac 实际 CLI、信号和退出行为仍须真机复核。
+
+接续开发时先保留下面的 stdio 协议与账户只读白名单，再实现原生容器。退出测试须覆盖 CLI 实际启动方式及其所属子进程；测试中的终止信号故障注入不代表已完成 Mac 进程树验收。
+
 需要 Python 3.10+ 和已登录的官方 Codex CLI。Mac 本地设置与快照位于 `~/Library/Application Support/CodexPulse/`。
 
 ```sh

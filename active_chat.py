@@ -1,7 +1,7 @@
 """Bind only a uniquely matched main-document title, never the newest session."""
 from dataclasses import dataclass, replace
 
-import thread_catalog
+from session_titles import clean_title
 
 
 @dataclass(frozen=True)
@@ -15,7 +15,7 @@ class Binding:
     def follow(self, title, catalog, probe_status="ok"):
         if self.mode != "auto":
             return self
-        if probe_status != "ok" or not thread_catalog.clean_title(title):
+        if probe_status != "ok" or not clean_title(title):
             identity, display, status = None, "当前对话暂不可识别", "unavailable"
         else:
             matches = {item["id"] for item in catalog if item["title"] == title}

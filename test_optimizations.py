@@ -7,6 +7,7 @@ import tempfile
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from active_chat import Binding
@@ -69,6 +70,20 @@ class CacheTests(unittest.TestCase):
 
 
 class SelectionAndSettingsTests(unittest.TestCase):
+    def test_invalid_settings_leave_the_session_running_and_report_unsaved_preferences(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            original = b'{"version":2,"quota":'
+            path.write_bytes(original)
+            owner = SimpleNamespace(
+                args=SimpleNamespace(settings_file=path), display_mode="desktop",
+                desktop_position=None, compact=True, animations=True, font_size=15,
+                manual=None, locked=True, visible_metrics=["tokens"], settings_error=False,
+            )
+            Overlay.save_preferences(owner)
+            self.assertTrue(owner.settings_error)
+            self.assertEqual(path.read_bytes(), original)
+
     def test_machine_pointer_keeps_explorer_and_packaged_launches_on_one_settings_file(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

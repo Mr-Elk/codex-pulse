@@ -7,7 +7,7 @@ from panel_runtime import update
 from product_controls import Select,hours_dialog,session_dialog,info,ThemeSelector
 from product_data import LABELS,metric_values
 from quota_model import selected_group,selected_window
-from quota_service import clean_config,METRIC_KEYS
+from quota_config import clean_config,METRIC_KEYS
 from svg_art import render_asset
 BG,INK,MUTED,ACCENT='#ffffff','#233955','#607088','#7865d6'
 

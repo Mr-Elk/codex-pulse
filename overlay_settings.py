@@ -5,6 +5,8 @@ import os
 import sys
 from pathlib import Path
 from overlay_style import normalize_keys, ORDER
+from quota_config import METRIC_KEYS
+from settings_store import read_document, write_document
 import theme
 
 FONT_SIZES = (13, 15, 17)
@@ -66,7 +68,7 @@ def load(path, legacy=None):
 
 def load_display(path):
     result = {"mode":"composer", "position":None, "compact":True, "animations":True,
-              "expanded_mode":"composer", "visible":True, "metric_order":list(__import__("quota_service").METRIC_KEYS)}
+              "expanded_mode":"composer", "visible":True, "metric_order":list(METRIC_KEYS)}
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
         value = document.get("display", {})
@@ -78,7 +80,6 @@ def load_display(path):
                 if type(value.get(key)) is bool:
                     result[key] = value[key]
             if value.get("presentation_schema")!=19 and result["mode"]=="composer":result["compact"]=False
-            from quota_service import METRIC_KEYS
             order = value.get("metric_order")
             if not isinstance(order, (list, tuple)):
                 order = document.get("visible_metrics", []) if value.get("presentation_schema") != 19 else []
@@ -91,16 +92,7 @@ def load_display(path):
 
 
 def save(path, font_size, position, locked=True, visible_metrics=None, display=None, theme_color=None, quota=None):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    value = {}
-    old_bytes = None
-    try:
-        old_bytes = path.read_bytes()
-        old = json.loads(old_bytes.decode("utf-8"))
-        if isinstance(old, dict):
-            value = old
-    except (OSError, ValueError):
-        pass
+    value, old_bytes = read_document(path)
     if old_bytes is not None and value.get("version", 1) == 1:
         backup = path.with_name(path.stem + ".v1.backup.json")
         try:
@@ -115,6 +107,4 @@ def save(path, font_size, position, locked=True, visible_metrics=None, display=N
     if theme_color is not None:
         value["theme_color"] = theme.normalize(theme_color)
     if quota is not None:value["quota"]=quota
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
-    temporary.replace(path)
+    write_document(path, value)

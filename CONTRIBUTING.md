@@ -1,14 +1,73 @@
 # 开发与测试
 
-需要 Windows、Python 3.10+（含 Tkinter）和 PowerShell。核心代码仅用标准库与 Windows API；背景模糊的 C++ 构建工具是可选开发依赖。
+共享数据核心需要 Python 3.10+，只用标准库。Windows 完整界面与回归还需要 Tkinter 和 PowerShell；背景模糊的 C++ 构建工具是可选开发依赖。macOS 可先运行下面的共享核心回归，完整原生界面与验收见 MACOS.md。
+
+开发与重构遵循 [ENGINEERING.md](ENGINEERING.md)。本文件统一维护检查命令；从项目源码根目录执行。
+
+## 按影响选择检查
+
+| 修改范围 | 适用检查 |
+| --- | --- |
+| 仅文档、注释或格式，行为未改变 | 内容、引用、命令入口与差异检查；涉及可执行格式变化时补充语法检查 |
+| 配置、历史恢复或额度规则 | 快速额度回归，并补充受影响模块已有测试 |
+| 会话绑定、目录读取或跨平台共享核心 | 共享核心回归；涉及 Windows 组合入口时再补充完整回归 |
+| 设置、菜单、弹窗、悬停提示或统计条 | 界面回归及 AGENTS.md 要求的实机操作和截图检查 |
+| 跨模块依赖、后台交互或配置兼容 | 完整回归；界面有变化时同时完成人工检查 |
+
+完整回归已包含的分组无需重复执行。测试数量以本轮实际输出为准；自动化通过不能替代真实界面、长期运行或异机验收。
+
+## 快速额度回归
+
+```powershell
+python -X utf8 -B -m unittest test_quota_config test_history_recovery test_quota test_settings_store test_quota_source -q
+```
+
+## 共享核心回归
+
+macOS 使用以下命令，Windows 可将 python3 换成 python。此组只用临时数据和测试子进程，不读取真实账户，不加载 Tk、GDI 或 Windows 界面模块：
+
+```sh
+python3 -X utf8 -B -m unittest test_active_chat test_thread_catalog test_pulse test_record_recovery test_quota_config test_history_recovery test_quota test_settings_store test_quota_source test_runtime_state test_quota_integration.IntegrationTests -q
+```
+
+这是明确选择的共享用例组。直接运行 discover 会导入 Windows 原生测试，不能把缺少 Windows API 的失败视作 macOS 共享核心失败，也不应把共享回归通过写成 Mac 界面验收。
+
+## 界面回归
+
+```powershell
+python -X utf8 -B -m unittest test_usage_records test_ui_layout_rules test_product_ui test_quota test_quota_regressions test_v19_fidelity -q
+```
+
+这组保留项目要求的界面相关检查。界面修改同时保留已确认的 SVG/Logo 几何、主题同步、字体角色、固定统计身份和个人设置兼容性。
+
+## 完整回归
 
 ```powershell
 python -X utf8 -B -m unittest discover -q
 ```
 
-测试创建受控 Tk 窗口和临时目录，请在可用的本地桌面会话运行。没有原生桌面的环境不算界面验收。若临时目录受保护，可将 TEMP/TMP 指向有写权限的本地目录。
+## 环境与失败判断
 
-界面修改请保留已确认的 SVG/Logo 几何、主题颜色同步、字体家族、固定统计身份和个人设置兼容性。覆盖用户行为与失败边界，不为单纯样式改动机械增加镜像测试。
+测试会创建受控 Tk 窗口、临时目录和测试子进程。桌面回归前确认 Tk、项目字体、PowerShell 及可写临时目录可用；仅为测试进程设置 TEMP/TMP，不改系统级环境。
+
+操作被拒绝、缺少桌面或字体加载失败时，先保留失败输出，用最小复现或已有基线判断原因。环境阻断与业务回归分别报告，完成不受影响的检查，再在具备授权与依赖的环境复核；不能仅凭经验把失败归因于环境，也不能通过放宽业务断言消除失败。
+
+## 已有场景入口
+
+以下为按问题查找测试的示例，不代表完整覆盖或最新通过结果：
+
+| 场景 | 测试入口 |
+| --- | --- |
+| 本地历史库占用后的刷新恢复、清空历史与错误撤销 | test_history_recovery.py |
+| 旧配置加载及配置模块的依赖边界 | test_quota_config.py |
+| 设置被截断、无法读取、替换失败及临时文件所有权 | test_settings_store.py |
+| 迟到的前一次响应、单次请求截止时间及本应用子进程回收 | test_quota_source.py |
+| 会话绑定的纯规则依赖边界 | test_active_chat.py |
+| 持有旧状态读取句柄时原子更新、心跳身份与启动器退出记录 | test_runtime_state.py |
+| 带空格路径下的 PowerShell 判定函数调用 | test_composer_wrapper.py |
+| 账户隔离、缺失数据、用量累计和提醒规则 | test_quota.py、test_quota_regressions.py |
+
+## 分发与资料
 
 发布文件使用 release_tools.py 生成并核对 SHA256，包含 LICENSE。DLL、PNG 导出、安装包、截图、缓存与本机数据不提交源码；预编译 DLL 和界面示例作为 Release 附件提供。
 

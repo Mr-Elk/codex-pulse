@@ -2,7 +2,7 @@
 from datetime import datetime
 import time
 from quota_model import selected_group, selected_window, recent_for_selection, clock_text, countdown, quota_percent, used_percent
-from quota_service import clean_config, METRIC_KEYS
+from quota_config import clean_config, METRIC_KEYS
 
 LABELS={'tokens':'Token','speed':'TPS','context':'上下文估算','cache':'缓存命中率','rounds':'轮次 / 请求',
         'quota':'剩余额度','recent':'最近用量','reset':'自然重置时间','credits':'重置卡数量'}

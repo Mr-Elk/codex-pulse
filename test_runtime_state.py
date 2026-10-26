@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import Mock
 
 from launch import supervise
-from runtime_state import RuntimeSession, atomic_json, finish_child, health, process_identity, read_json, utc_now
+from runtime_state import RuntimeSession, atomic_json, finish_child, health, process_identity, read_json, utc_now, open_status_reader
 from tk_lifetime import TkLifetime
 
 
@@ -88,8 +88,9 @@ class RuntimeTests(unittest.TestCase):
             def reader():
                 while not stop.is_set():
                     try:
-                        json.loads(p.read_text())
-                        time.sleep(.001)  # Readers release Windows file sharing between samples.
+                        with open_status_reader(p) as reader:
+                            json.load(reader)
+                        time.sleep(.001)
                     except PermissionError: time.sleep(.001)
                     except Exception as e: failures.append(type(e).__name__);break
             worker=threading.Thread(target=reader);worker.start()
@@ -97,6 +98,15 @@ class RuntimeTests(unittest.TestCase):
                 for i in range(40):atomic_json(p,{"iteration":i,"data":"x"*2048})
             finally:stop.set();worker.join()
             self.assertEqual(failures,[])
+
+    def test_an_open_status_snapshot_does_not_block_the_next_atomic_update(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/"运行状态-🙂.json"
+            atomic_json(path,{"iteration":0})
+            with open_status_reader(path) as reader:
+                atomic_json(path,{"iteration":1})
+                self.assertEqual(json.load(reader),{"iteration":0})
+            self.assertEqual(read_json(path),{"iteration":1})
 
 
 class LifetimeTests(unittest.TestCase):

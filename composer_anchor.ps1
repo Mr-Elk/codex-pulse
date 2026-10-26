@@ -1,4 +1,7 @@
-﻿param([Parameter(Mandatory=$true)][long]$WindowHandle, [switch]$Diagnostics, [switch]$IncludeChat, [switch]$Watch, [long]$IgnoreProcessId = 0)
+﻿param([Parameter(Mandatory=$true)][long]$WindowHandle, [switch]$Diagnostics, [switch]$IncludeChat, [switch]$Watch, [long]$IgnoreProcessId = 0,
+    [ValidateRange(1,4096)][int]$MaxRequests = 256,
+    [ValidateRange(1,3600)][int]$MaxAgeSeconds = 300,
+    [ValidateRange(32,4096)][int]$MaxPrivateMiB = 160)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 Add-Type -AssemblyName UIAutomationClient
@@ -170,18 +173,38 @@ function Get-PulseContext {
 }
 
 if ($Watch) {
-    # The parent sends one request at a time. EOF shuts down the helper; no timer
-    # runs while the app is inactive. Assemblies stay loaded between requests.
-    while ($null -ne ($command = [Console]::ReadLine())) {
-        if ($command -eq 'exit') { break }
-        if ($command -ne 'probe') { continue }
-        $timer = [System.Diagnostics.Stopwatch]::StartNew()
-        try { $value = Get-PulseContext | ConvertFrom-Json }
-        catch { $value = [pscustomobject]@{composer=$null; chat_title=$null; chat_status='unavailable'; interaction_open=$null} }
-        $timer.Stop()
-        $value | Add-Member -NotePropertyName probe_pid -NotePropertyValue $PID -Force
-        $value | Add-Member -NotePropertyName probe_ms -NotePropertyValue $timer.Elapsed.TotalMilliseconds -Force
-        [Console]::WriteLine(($value | ConvertTo-Json -Compress -Depth 4))
-        [Console]::Out.Flush()
-    }
+    # UIA provider/proxy allocations can outlive a scan, including native caches.
+    # Collect short-lived wrappers, then bound the whole child process lifetime.
+    # Always deliver the completed observation before exiting; the parent keeps
+    # the current UI and requests a fresh observation from the next child.
+    $completed = 0
+    $lifetime = [System.Diagnostics.Stopwatch]::StartNew()
+    $watchProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+    try {
+        while ($null -ne ($command = [Console]::ReadLine())) {
+            if ($command -eq 'exit') { break }
+            if ($command -ne 'probe') { continue }
+            $timer = [System.Diagnostics.Stopwatch]::StartNew()
+            try { $value = Get-PulseContext | ConvertFrom-Json }
+            catch { $value = [pscustomobject]@{composer=$null; chat_title=$null; chat_status='unavailable'; interaction_open=$null} }
+            $completed++
+            $watchProcess.Refresh()
+            $overMemory = $watchProcess.PrivateMemorySize64 -ge ($MaxPrivateMiB * 1MB)
+            if (($completed % 16) -eq 0 -or $overMemory) {
+                [GC]::Collect()
+                [GC]::WaitForPendingFinalizers()
+                [GC]::Collect()
+                $watchProcess.Refresh()
+            }
+            $privateBytes = $watchProcess.PrivateMemorySize64
+            $recycle = $completed -ge $MaxRequests -or $lifetime.Elapsed.TotalSeconds -ge $MaxAgeSeconds -or $privateBytes -ge ($MaxPrivateMiB * 1MB)
+            $timer.Stop()
+            $value | Add-Member -NotePropertyName probe_pid -NotePropertyValue $PID -Force
+            $value | Add-Member -NotePropertyName probe_ms -NotePropertyValue $timer.Elapsed.TotalMilliseconds -Force
+            $value | Add-Member -NotePropertyName probe_private_bytes -NotePropertyValue $privateBytes -Force
+            [Console]::WriteLine(($value | ConvertTo-Json -Compress -Depth 4))
+            [Console]::Out.Flush()
+            if ($recycle) { break }
+        }
+    } finally { $watchProcess.Dispose() }
 } else { Get-PulseContext }

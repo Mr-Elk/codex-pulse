@@ -14,10 +14,41 @@ def utc_now():
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
+def open_status_reader(path):
+    """Open one status snapshot while allowing the writer to replace its path."""
+    if sys.platform != "win32":
+        return Path(path).open("r", encoding="utf-8-sig")
+    import msvcrt
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateFileW.argtypes = [W.LPCWSTR, W.DWORD, W.DWORD, ctypes.c_void_p, W.DWORD, W.DWORD, W.HANDLE]
+    kernel.CreateFileW.restype = W.HANDLE
+    kernel.CloseHandle.argtypes = [W.HANDLE]
+    kernel.CloseHandle.restype = W.BOOL
+    # FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE. The delete share
+    # also permits rename/replace while this reader retains its old snapshot:
+    # https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew
+    handle = kernel.CreateFileW(str(Path(path)), 0x80000000, 7, None, 3, 0x80, None)
+    if handle == ctypes.c_void_p(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        descriptor = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY | os.O_NOINHERIT)
+    except BaseException:
+        kernel.CloseHandle(handle)
+        raise
+    # Ownership transfers to the descriptor, then to the returned file object.
+    try:
+        return os.fdopen(descriptor, "r", encoding="utf-8-sig")
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
 def read_json(path):
     for attempt in range(3):
         try:
-            value = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+            with open_status_reader(path) as reader:
+                value = json.load(reader)
             return value if isinstance(value, dict) else {}
         except PermissionError:
             if attempt < 2:
@@ -25,6 +56,46 @@ def read_json(path):
         except (OSError, ValueError):
             return {}
     return {}
+
+
+def _replace_status_file(temporary, path):
+    if sys.platform != "win32":
+        os.replace(temporary, path)
+        return
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateFileW.argtypes = [W.LPCWSTR, W.DWORD, W.DWORD, ctypes.c_void_p, W.DWORD, W.DWORD, W.HANDLE]
+    kernel.CreateFileW.restype = W.HANDLE
+    kernel.CloseHandle.argtypes = [W.HANDLE]
+    kernel.CloseHandle.restype = W.BOOL
+    kernel.SetFileInformationByHandle.argtypes = [W.HANDLE, ctypes.c_int, ctypes.c_void_p, W.DWORD]
+    kernel.SetFileInformationByHandle.restype = W.BOOL
+
+    class RenameInfo(ctypes.Structure):
+        _fields_ = [("flags", W.DWORD), ("root", W.HANDLE), ("length", W.DWORD), ("name", W.WCHAR * 1)]
+
+    name = str(path.absolute()).encode("utf-16-le")
+    buffer = ctypes.create_string_buffer(ctypes.sizeof(RenameInfo) + len(name))
+    info = RenameInfo.from_buffer(buffer)
+    # REPLACE_IF_EXISTS | POSIX_SEMANTICS retains open old snapshots and keeps
+    # the destination continuously present, without ignoring read-only access:
+    # https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information
+    info.flags, info.length = 3, len(name)
+    ctypes.memmove(ctypes.addressof(buffer) + RenameInfo.name.offset, name, len(name))
+    handle = kernel.CreateFileW(str(temporary), 0x10000, 7, None, 3, 0x80, None)
+    if handle == ctypes.c_void_p(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    fallback = False
+    try:
+        if not kernel.SetFileInformationByHandle(handle, 22, buffer, len(buffer)):  # FileRenameInfoEx
+            error = ctypes.get_last_error()
+            if error in (1, 50, 87):  # Older filesystems may not implement this operation.
+                fallback = True
+            else:
+                raise ctypes.WinError(error)
+    finally:
+        kernel.CloseHandle(handle)
+    if fallback:
+        os.replace(temporary, path)
 
 
 def atomic_json(path, value):
@@ -35,7 +106,7 @@ def atomic_json(path, value):
         temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
         for attempt in range(3):
             try:
-                os.replace(temporary, path)
+                _replace_status_file(temporary, path)
                 return
             except PermissionError:
                 if attempt == 2:

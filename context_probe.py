@@ -40,7 +40,8 @@ def context_metadata(value):
 
 
 class PersistentProbe:
-    def __init__(self, script=None, command_factory=None):
+    def __init__(self, script=None, command_factory=None, *, max_requests=256,
+                 max_age=300, max_private_mib=160, request_deadline=15, clock=time.monotonic):
         self.script = script or Path(__file__).with_name("composer_anchor.ps1")
         self.command_factory = command_factory
         self.process = None
@@ -55,6 +56,16 @@ class PersistentProbe:
         self.avoid_rect = None
         self.ignored_own_elements = 0
         self.metadata = context_metadata(None)
+        self.clock = clock
+        self.max_requests = max_requests
+        self.max_age = max_age
+        self.max_private_mib = max_private_mib
+        self.request_deadline = request_deadline
+        self.process_started_at = 0
+        self.completed = 0
+        self.private_bytes = 0
+        self.recycles = 0
+        self.last_recycle_reason = None
 
     @staticmethod
     def _read(process, responses):
@@ -74,7 +85,9 @@ class PersistentProbe:
         self.close()
         command = self.command_factory(hwnd) if self.command_factory else [
             "powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(self.script),
-            "-WindowHandle", str(hwnd), "-IncludeChat", "-Watch", "-IgnoreProcessId", str(os.getpid())]
+            "-WindowHandle", str(hwnd), "-IncludeChat", "-Watch", "-IgnoreProcessId", str(os.getpid()),
+            "-MaxRequests", str(self.max_requests), "-MaxAgeSeconds", str(self.max_age),
+            "-MaxPrivateMiB", str(self.max_private_mib)]
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
                                         bufsize=1, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
@@ -82,15 +95,41 @@ class PersistentProbe:
         self.responses = queue.Queue()
         threading.Thread(target=self._read, args=(self.process, self.responses), daemon=True).start()
         self.starts += 1
+        self.process_started_at = self.clock()
+        self.completed = 0
+        self.private_bytes = 0
+
+    def recycle_reason(self):
+        if self.inflight:
+            return "stalled" if self.started_at and self.clock() - self.started_at >= self.request_deadline else None
+        if self.completed >= self.max_requests:
+            return "requests"
+        if self.clock() - self.process_started_at >= self.max_age:
+            return "age"
+        if self.private_bytes >= self.max_private_mib * 1024 * 1024:
+            return "memory"
+        return None
 
     def read(self, hwnd, timeout=4):
+        reason = self.recycle_reason() if self.process is not None else None
+        if reason:
+            self.recycles += 1
+            self.last_recycle_reason = reason
+            self.close()
         if self.process is None or self.hwnd != hwnd or self.process.poll() is not None:
             self.start(hwnd)
         if not self.inflight:
-            self.process.stdin.write("probe\n")
-            self.process.stdin.flush()
+            try:
+                self.process.stdin.write("probe\n")
+                self.process.stdin.flush()
+            except (OSError, ValueError):
+                # A helper can exit after delivering a valid bounded-lifetime
+                # response, between poll() and write(). Retry only this request.
+                self.start(hwnd)
+                self.process.stdin.write("probe\n")
+                self.process.stdin.flush()
             self.inflight = True
-            self.started_at = time.monotonic()
+            self.started_at = self.clock()
             self.requests += 1
         try:
             value = self.responses.get(timeout=timeout)
@@ -100,7 +139,10 @@ class PersistentProbe:
             self.metadata = context_metadata(None)
             return None, None, "unavailable", None
         self.inflight = False
-        self.response_at = time.monotonic()
+        self.response_at = self.clock()
+        self.completed += 1
+        private = value.get("probe_private_bytes") if isinstance(value, dict) else None
+        self.private_bytes = private if type(private) is int and private >= 0 else 0
         self.last_latency_ms = round((self.response_at - self.started_at) * 1000, 1)
         self.avoid_rect = None
         self.metadata = context_metadata(value)
@@ -122,10 +164,18 @@ class PersistentProbe:
                 try:
                     process.wait(timeout=0.5)
                 except subprocess.TimeoutExpired:
-                    process.terminate()  # Our helper only, during explicit shutdown.
-                    process.wait(timeout=2)
+                    process.terminate()  # Only the child owned by this object.
+                    try:
+                        process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=2)
         except (OSError, ValueError, subprocess.TimeoutExpired):
             pass
         finally:
             if process.stdout:
                 process.stdout.close()
+        if process.poll() is None:
+            # Never create another helper while an owned one could still run.
+            self.process = process
+            raise OSError("Locator helper could not be stopped")

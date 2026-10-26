@@ -4,6 +4,7 @@ import sqlite3
 import json
 import time
 from contextlib import closing
+from session_titles import clean_title
 
 
 def recent(home, limit=20, include_archived=False, *, work_only=False):
@@ -53,10 +54,6 @@ def recent(home, limit=20, include_archived=False, *, work_only=False):
                 for identity,title in rows]
     except (sqlite3.Error,OSError,ValueError):
         return []
-
-
-def clean_title(value):
-    return isinstance(value,str) and 0<len(value)<=160 and "\n" not in value and "\r" not in value
 
 
 class CatalogCache:

@@ -8,7 +8,7 @@ import theme
 from panel_widgets import Surface,Segmented,photo
 from svg_art import render_asset
 from quota_model import clock_text,countdown,selected_group,recent_for_selection
-from quota_service import clean_config
+from quota_config import clean_config
 from font_policy import family
 
 BG,INK,MUTED,TINT,ACCENT='#ffffff','#1e2238','#6f7691','#f3f1fa','#7865d6'

@@ -1,4 +1,7 @@
 import unittest
+from pathlib import Path
+import subprocess
+import sys
 
 from active_chat import Binding
 
@@ -6,6 +9,22 @@ CATALOG = [{"id":"a","title":"对话 A"},{"id":"b","title":"对话 B"}]
 
 
 class FollowingTests(unittest.TestCase):
+    def test_binding_rules_import_without_catalog_storage_or_native_ui(self):
+        program = """
+import sys
+sys.path.insert(0, sys.argv[1])
+from active_chat import Binding
+bound = Binding().follow('Fixture', [{'id': 'fixture', 'title': 'Fixture'}])
+assert bound.identity == 'fixture'
+unexpected = {'thread_catalog', 'sqlite3', 'tkinter'} & sys.modules.keys()
+assert not unexpected, sorted(unexpected)
+"""
+        result = subprocess.run(
+            [sys.executable, "-I", "-B", "-c", program, str(Path(__file__).parent)],
+            capture_output=True, timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
+
     def test_follows_visible_title_instead_of_catalog_recency(self):
         binding=Binding().follow("对话 B",CATALOG)
         self.assertEqual(binding.identity,"b")

@@ -29,7 +29,9 @@ from pulse import Monitor
 from context_probe import PersistentProbe, parse_context
 from snapshot_cache import SnapshotCache
 from runtime_state import RuntimeSession, atomic_json
-from quota_service import QuotaService,load_config,clean_config,reminder_rule
+from quota_service import QuotaService
+from quota_config import load_config,clean_config,reminder_rule
+from settings_store import SettingsFormatError
 from quota_model import strip_values,selected_window
 
 BASE = Path(__file__).resolve().parent
@@ -398,7 +400,7 @@ class Overlay:
             preferences.save(self.args.settings_file, self.font_size, self.manual, self.locked, self.visible_metrics,
                              display=display,theme_color=getattr(self,"theme_color",theme.current()),quota=getattr(self,"quota_preferences",None))
             self.settings_error = False
-        except OSError:
+        except (OSError, SettingsFormatError):
             self.settings_error = True
             print("Codex Pulse could not save preferences; this session still works.", flush=True)
 

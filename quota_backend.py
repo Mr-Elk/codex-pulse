@@ -2,16 +2,16 @@
 import argparse
 import copy
 import json
-import os
 from pathlib import Path
 import sys
 import threading
 import time
-import uuid
 
 from quota_model import strip_values,recent_for_selection
-from quota_service import QuotaService,clean_config,load_config
+from quota_service import QuotaService
+from quota_config import clean_config,load_config
 from quota_source import CodexQuotaSource
+from settings_store import read_document,write_document
 
 
 def settings_path():
@@ -21,16 +21,9 @@ def settings_path():
 
 
 def persist_config(path,config):
-    try:value=json.loads(path.read_text(encoding='utf-8'))
-    except FileNotFoundError:value={}
-    if not isinstance(value,dict):raise ValueError('设置文件格式不可用，原文件已保留')
+    value,_=read_document(path)
     value['quota']=clean_config(config)
-    path.parent.mkdir(parents=True,exist_ok=True)
-    temporary=path.with_name(path.name+'.'+uuid.uuid4().hex+'.tmp')
-    try:
-        temporary.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf-8')
-        os.replace(temporary,path)
-    finally:temporary.unlink(missing_ok=True)
+    write_document(path,value)
 
 
 class Bridge:

@@ -1,6 +1,5 @@
-"""Shared Windows/macOS quota worker, configuration and threshold notifications."""
+"""Shared Windows/macOS quota worker and threshold notifications."""
 import copy
-import json
 import sqlite3
 import threading
 import time
@@ -8,35 +7,8 @@ import time
 from quota_history import QuotaHistory
 from quota_model import normalize, selected_group, selected_window
 from quota_source import CodexQuotaSource, QuotaSourceError
-
-DEFAULTS={'group':None,'window':'primary','hours':1,'capsule':'quota','reminder':{'enabled':False,'source':'focus','threshold':20}}
-METRIC_KEYS=('tokens','speed','context','cache','rounds','quota','recent','reset','credits')
-
-
-def clean_config(value):
-    value=value if isinstance(value,dict) else {};r=value.get('reminder');r=r if isinstance(r,dict) else {}
-    hours=value.get('hours');threshold=r.get('threshold')
-    primary=value.get('capsule_primary')
-    if primary not in METRIC_KEYS:primary='tokens' if value.get('capsule')=='task' else 'quota'
-    secondary=value.get('capsule_secondary') if 'capsule_secondary' in value else ('speed' if value.get('capsule')=='task' else 'recent')
-    if secondary not in METRIC_KEYS or secondary==primary:secondary=None
-    return {'group':value.get('group') if isinstance(value.get('group'),str) else None,
-      'window':value.get('window') if value.get('window') in ('primary','secondary') else 'primary',
-      'hours':hours if type(hours) is int and 1<=hours<=168 else 1,
-      'capsule':value.get('capsule') if value.get('capsule') in ('quota','task') else 'quota',
-      'capsule_primary':primary,'capsule_secondary':secondary,
-      'reminder':{'enabled':r.get('enabled') is True,'source':r.get('source') if r.get('source') in ('focus','primary','secondary','any') else 'focus',
-        'threshold':threshold if type(threshold) is int and 0<=threshold<=100 else 20}}
-
-
-def load_config(path):
-    try:return clean_config(json.loads(path.read_text(encoding='utf-8')).get('quota'))
-    except (OSError,ValueError,AttributeError):return clean_config(None)
-
-
-def reminder_rule(config):
-    c=clean_config(config)
-    return {'group':c['group'],'window':c['window'] if c['reminder']['source']=='focus' else None,'reminder':c['reminder']}
+# Preserve imports used by older callers; new consumers import quota_config.
+from quota_config import DEFAULTS, METRIC_KEYS, clean_config, load_config, reminder_rule
 
 
 class QuotaService:
@@ -90,6 +62,7 @@ class QuotaService:
                 if window:state['recent']=state['recent_by_window'].get(window['key'])
             except sqlite3.Error:self.history_error='本机历史读取失败；用量暂不可用'
         if self.history_error:state['history_error']=self.history_error
+        else:state.pop('history_error',None)
         self.last=state
         event=copy.deepcopy(state)
         if notices and notice_rule==reminder_rule(config):event.update(notifications=notices,notification_rule=notice_rule)
@@ -121,7 +94,11 @@ class QuotaService:
             raw=self.source.read();now=self.clock();state=normalize(raw,now)
             if state.get('status')=='ready':
                 try:
-                    if self.history:self.history.record(state)
+                    if self.history:
+                        self.history.record(state)
+                        # A successful write recovers a prior transient failure;
+                        # reminders/readback below can still report a new one.
+                        self.history_error=None
                     with self.lock:
                         config=copy.deepcopy(self.config)
                         notices=self.reminders(state,config,now)
