@@ -45,6 +45,19 @@ def activate(accent):
 def current():
     return _accent
 
+def statistics_palette():
+    """The approved v19 CSS color-mix rules, including premultiplied alpha."""
+    seed=tuple(int(_accent[i:i+2],16) for i in (1,3,5))
+    def mix(weight,base):
+        b=tuple(int(base[i:i+2],16) for i in (1,3,5))
+        return '#'+''.join(f'{round(a*weight+c*(1-weight)):02x}' for a,c in zip(seed,b))
+    alpha=.09+.91*(220/255)
+    fill='#'+f'{round(alpha*255):02x}'+''.join(f'{round((a*.09+255*.91*(220/255))/alpha):02x}' for a in seed)
+    result={'value':mix(.45,'#182b45'),'secondary':mix(.38,'#596c87'),'icon':mix(.36,'#74829a'),'border':mix(.28,'#ffffff'),'fill':fill}
+    roles=_roles.setdefault(_accent,{})
+    for value in result.values():roles[value]=value
+    return result
+
 
 def luminance(rgb):
     linear=[c/12.92 if c<=.04045 else ((c+.055)/1.055)**2.4 for c in rgb]
@@ -70,6 +83,25 @@ def resolve(value, accent):
     while 1.05/(luminance(next_rgb)+.05)<minimum and max(next_rgb)>.01:
         next_rgb=tuple(c*.97 for c in next_rgb)
     return "#"+alpha+"".join(f"{round(c*255):02x}" for c in next_rgb)
+
+
+def action_fill(fill):
+    """Give familiar saturated accents a readable white-caption surface."""
+    rgb=tuple(int(fill[i:i+2],16)/255 for i in (1,3,5))
+    # Very pale custom colors retain their identity and use dark captions.
+    if luminance(rgb)>.5:return fill
+    while 1.05/(luminance(rgb)+.05)<4.5:rgb=tuple(value*.98 for value in rgb)
+    return '#'+''.join(f'{int(value*255):02x}' for value in rgb)
+
+
+def action_ink(fill):
+    """Keep action text legible for both preset and very pale custom accents."""
+    rgb=tuple(int(fill[i:i+2],16)/255 for i in (1,3,5))
+    light=luminance(rgb)
+    white=1.05/(light+.05)
+    dark_rgb=tuple(int('233955'[i:i+2],16)/255 for i in (0,2,4))
+    dark=(light+.05)/(luminance(dark_rgb)+.05)
+    return '#ffffff' if white>=4.5 else '#233955' if dark>=4.5 else '#000000'
 
 
 def color(value):
