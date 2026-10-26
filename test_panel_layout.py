@@ -1,7 +1,10 @@
 """Viewport behavior: one session-list scrollbar without clipping controls."""
 from contextlib import contextmanager
 from pathlib import Path
-import tempfile
+import tempfile,time
+from quota_service import METRIC_KEYS,clean_config
+from test_quota import payload
+from product_controls import session_dialog
 import tkinter as tk
 import unittest
 from unittest.mock import Mock,patch
@@ -19,16 +22,19 @@ SAMPLES=[]
 
 class PanelLayoutTests(unittest.TestCase):
     @contextmanager
-    def panel(self, scale=1, work_height=900, title="工作会话"):
+    def panel(self, scale=1, work_height=900, title="工作会话",tab="strip"):
         root=tk.Tk();root.withdraw();errors=[]
         root.report_callback_exception=lambda *args:errors.append(str(args[1]))
         owner=layering.YieldTests().window();owner.root=root;owner.scale=scale
         owner.display_mode="desktop";owner.render_strip=render;owner.snapshot=SNAPSHOT
-        owner.metric_choices={key:tk.BooleanVar(root,value=True) for key in style.ORDER}
+        owner.quota_snapshot=payload(at=time.time());owner.quota_preferences=clean_config(None);owner.quota_service=None
+        owner.visible_metrics=tuple(METRIC_KEYS);owner.metric_order=list(METRIC_KEYS)
+        owner.metric_choices={key:tk.BooleanVar(root,value=True) for key in METRIC_KEYS}
         owner.lock_choice=tk.BooleanVar(root,value=True);owner.follow_choice=tk.BooleanVar(root,value=True)
         owner.thread_choice=tk.StringVar(root,value="a");owner.close=Mock()
         owner.theme_color=theme.DEFAULT;owner.expanded_mode="composer";owner.bound_title=title
         area=Rect(0,0,round(1280*scale),round(work_height*scale))
+        owner.last_bounds=Rect(round(400*scale),round((work_height-60)*scale),round(1088*scale),round((work_height-20)*scale))
         owner.win.work_area.return_value=area
         catalog=[{"id":"a" if i==0 else str(i),"title":f"测试工作 {i:03d}"} for i in range(227)]
         with tempfile.TemporaryDirectory() as folder:
@@ -37,7 +43,7 @@ class PanelLayoutTests(unittest.TestCase):
                  patch.object(tk.Tk,"focus_force"),patch("thread_catalog.recent",return_value=catalog):
                 panel=None
                 try:
-                    panel=SettingsPanel(owner,area.right-20,area.bottom-20,tab="session")
+                    panel=SettingsPanel(owner,area.right-20,area.bottom-20,tab=tab);owner.settings_panel=panel;panel.modal_open=True
                     root.update()
                     yield panel,root,area
                     self.assertEqual(errors,[])
@@ -46,41 +52,38 @@ class PanelLayoutTests(unittest.TestCase):
                     root.update()
                     root.destroy();theme.activate(theme.DEFAULT)
 
-    def record(self,panel,area,label):
-        sample={"label":label,"scale":panel.scale,"work_height":area.height,
-                "panel_height":panel.window.winfo_height(),"geometry":panel.window.geometry(),"viewport":panel.content.winfo_height(),
-                "body":panel.body.winfo_reqheight(),"list_height":panel.choices.winfo_height(),
-                "outer_scroll":panel.scroller.overflow,"list_scroll":panel.session_scroll.overflow}
-        SAMPLES.append(sample)
-        return sample
-
-    def test_session_fits_normal_work_area_at_each_scale_and_long_titles(self):
+    def test_each_page_fits_normal_work_area_and_short_screen_scrolls(self):
         for scale in (1,1.25,1.5,2):
-            for title in ("工作会话","较长的工作会话标题与需求梳理以及业务接口联调"*3):
-                with self.subTest(scale=scale,long_title=len(title)>10),self.panel(scale,title=title) as (panel,root,area):
-                    s=self.record(panel,area,"normal")
-                    self.assertFalse(s["outer_scroll"])
-                    self.assertTrue(s["list_scroll"])
-                    self.assertLessEqual(s["body"],s["viewport"]+2)
-                    self.assertGreaterEqual(s["list_height"],panel.px(96))
-                    self.assertGreaterEqual(panel.window.winfo_y(),area.top)
-                    self.assertLessEqual(panel.window.winfo_y()+s["panel_height"],area.bottom)
-                    self.assertLessEqual(panel.choose_button.winfo_rooty()+panel.choose_button.winfo_height(),panel.content.winfo_rooty()+s["viewport"])
+            with self.subTest(scale=scale),self.panel(scale) as (p,root,area):
+                for tab in ('strip','quota','display'):
+                    p.show_tab(tab);root.update()
+                    self.assertLessEqual(p.window.winfo_y()+p.window.winfo_height(),area.bottom)
+                    self.assertLessEqual(p.body.winfo_reqheight(),p.content.winfo_height()+2)
+                for view in ('capsule','source'):
+                    p.strip_view=view;p.show_tab('strip');root.update()
+                    self.assertLessEqual(p.body.winfo_reqheight(),p.content.winfo_height()+2)
+        with self.panel(1.5,520) as (p,root,area):
+            self.assertTrue(p.scroller.overflow);self.assertLessEqual(p.window.winfo_height(),area.height)
+            p.content.yview_moveto(1);root.update();self.assertAlmostEqual(p.content.yview()[1],1)
 
-    def test_search_keeps_one_scroll_area_and_short_screen_remains_reachable(self):
-        with self.panel() as (panel,root,area):
-            for term in ("026","不存在的查询","", "013", ""):
-                panel.search.set(term);root.update()
-                s=self.record(panel,area,"search")
-                self.assertFalse(s["outer_scroll"])
-                self.assertEqual(panel.content.yview(),(0.,1.))
-            panel.show_tab("strip");root.update()
-            panel.show_tab("session");root.update()
-            self.assertFalse(panel.scroller.overflow)
-        with self.panel(scale=1.5,work_height=520) as (panel,root,area):
-            s=self.record(panel,area,"short")
-            self.assertLessEqual(s["panel_height"],area.height)
-            self.assertGreaterEqual(s["list_height"],panel.px(96))
-            self.assertTrue(s["outer_scroll"])
-            panel.content.yview_moveto(1);root.update()
-            self.assertLessEqual(panel.choose_button.winfo_rooty()+panel.choose_button.winfo_height(),panel.content.winfo_rooty()+panel.content.winfo_height()+2)
+    def test_session_candidate_cancel_confirm_and_search(self):
+        with self.panel() as (p,root,_):
+            original=p.owner.binding
+            dialog=session_dialog(p);root.update();self.assertEqual(len(dialog.session_tree.get_children()),227)
+            dialog.session_tree.selection_set('15');root.update();self.assertEqual(p.owner.binding,original)
+            dialog.cancel_session();root.update();self.assertEqual(p.owner.binding,original)
+            dialog=session_dialog(p);root.update();dialog.search.set('不存在');root.update()
+            self.assertEqual(dialog.session_tree.get_children(),());self.assertEqual(dialog.confirm_button.cget('state'),'disabled')
+            dialog.search.set('026');root.update();self.assertEqual(len(dialog.session_tree.get_children()),1)
+            dialog.session_tree.selection_set('26');root.update();dialog.confirm_session();root.update()
+            self.assertEqual((p.owner.binding.mode,p.owner.binding.identity),('fixed','26'))
+
+    def test_settings_uses_absolute_coordinates_on_left_and_upper_monitors(self):
+        for area in (Rect(-1920,0,0,1080),Rect(-1920,-1080,0,0)):
+            with self.subTest(area=area),self.panel() as (p,root,_):
+                p.owner.win.work_area.return_value=area
+                other=SettingsPanel(p.owner,area.right-20,area.bottom-20);other.modal_open=True;root.update()
+                try:
+                    self.assertGreaterEqual(other.window.winfo_x(),area.left);self.assertLessEqual(other.window.winfo_x()+other.window.winfo_width(),area.right)
+                    self.assertGreaterEqual(other.window.winfo_y(),area.top);self.assertLessEqual(other.window.winfo_y()+other.window.winfo_height(),area.bottom)
+                finally:other.close()

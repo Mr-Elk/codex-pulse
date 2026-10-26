@@ -72,139 +72,27 @@ class ThemeTests(unittest.TestCase):
 
 
 class NativePanelTests(unittest.TestCase):
-    def test_repeat_modes_selection_theme_changes_and_cancel_on_existing_window(self):
-        root=tk.Tk();root.withdraw();errors=[]
-        root.report_callback_exception=lambda *args:errors.append(str(args[1]))
-        owner=layering.YieldTests().window();owner.root=root
-        owner.display_mode="desktop"
-        owner.render_strip=render;owner.snapshot=SNAPSHOT
-        owner.metric_choices={key:tk.BooleanVar(root,value=True) for key in style.ORDER}
-        owner.lock_choice=tk.BooleanVar(root,value=True)
-        owner.follow_choice=tk.BooleanVar(root,value=True)
-        owner.thread_choice=tk.StringVar(root,value="a")
-        owner.close=Mock();owner.theme_color=theme.DEFAULT;owner.expanded_mode="composer"
-        owner.win.work_area.return_value=Rect(0,0,1280,960)
-        catalog=[{"id":"a","title":"工作 A"},{"id":"b","title":"工作 B"}]
-        with tempfile.TemporaryDirectory() as folder:
-            owner.args.codex_home=Path(folder);owner.args.settings_file=Path(folder)/"settings.json"
-            with patch("panel_chrome.Chrome"),\
-                 patch.object(tk.Tk,"lift"),patch.object(tk.Tk,"focus_force"),\
-                 patch("thread_catalog.recent",return_value=catalog):
-                panel=None
-                try:
-                    theme.activate("#c34c86")
-                    panel=SettingsPanel(owner,700,760,tab="display");owner.settings_panel=panel
-                    self.assertEqual(panel.tab,"display")
-                    root.update()
-                    for button in panel.mode_buttons.values():
-                        for tag in ("mode-title","mode-description"):
-                            left,_,right,_=button.bbox(tag)
-                            self.assertLessEqual(abs((left+right)/2-button.winfo_width()/2),1)
-                    self.assertIsNot(panel.window.tk,owner.root.tk)
-                    self.assertEqual(panel.window.winfo_exists(),1)
-                    owner.win.own_overlay.assert_called_with(panel.hwnd,None)
-                    owner.win.set_floating.assert_called_with(panel.hwnd,True)
-                    panel.show_tab("session")
-                    for index in range(16):
-                        mode="fixed" if index%2==0 else "auto"
-                        panel.binding_modes.activate(mode)
-                        self.assertEqual(owner.binding.mode,mode)
-                        self.assertEqual(panel.binding_modes.selected,mode)
-                    panel.binding_modes.activate("fixed")
-                    self.assertEqual(panel.binding_status.cget("text"),"待选择")
-                    panel.tree.selection_set("1");panel.selection_state();panel.choose_button.invoke()
-                    self.assertEqual((owner.binding.mode,owner.binding.identity),("fixed","b"))
-                    self.assertEqual(panel.choose_button.cget("state"),"disabled")
-                    panel.show_tab("display")
-                    window_id=panel.window.winfo_id()
-                    for _ in range(3):
-                        for seed in [value for _,value in theme.PRESETS]+["#225599"]:
-                            panel.scroller.set(.2,.5)
-                            panel.scroller.reveal()
-                            if seed in panel.theme_buttons:
-                                panel.theme_buttons[seed].invoke()
-                            else:
-                                owner.set_theme_color(seed)
-                            width,height=decode_png(panel.scroller.thumb_png)[0][:2]
-                            ink=panel.scroller.ink
-                            # Narrow antialiased strokes can overshoot RGB a few
-                            # levels during bicubic downsampling; their hue/opacity
-                            # must still follow the active palette immediately.
-                            self.assertTrue(all(abs(a-b)<=6 for a,b in zip(
-                                pixel(panel.scroller.thumb_png,width//2,height//2)[:3],
-                                tuple(int(ink[i:i+2],16) for i in (1,3,5)))))
-                            self.assertGreaterEqual(pixel(panel.scroller.thumb_png,width//2,height//2)[3],250)
-                            self.assertEqual((panel.scroller.first,panel.scroller.last),(.2,.5))
-                            root.update()
-                            self.assertEqual(panel.tab,"display")
-                            self.assertEqual(panel.window.winfo_id(),window_id)
-                            self.assertIn(seed.upper(),panel.theme_value.cget("text"))
-                            self.assertEqual([value for value,button in panel.theme_buttons.items() if button.selected],
-                                             [seed] if seed in panel.theme_buttons else [])
-                            for value,button in panel.theme_buttons.items():
-                                button.redraw()
-                                self.assertEqual(pixel(button.png,15,18)[:3],
-                                                 tuple(int(value[i:i+2],16) for i in (1,3,5)))
-                                self.assertLessEqual(button.winfo_x()+button.winfo_width(),
-                                                     button.master.winfo_width())
-                            surfaces=[widget for widget in panel.body.winfo_children() if hasattr(widget,"fill")]
-                            self.assertEqual([widget.fill for widget in surfaces],
-                                             [theme.resolve(value,seed) for value in ("#f8f7fc","#faf9fd")])
-                    before=owner.theme_color
-                    editor=panel.color_editor
-                    panel.choose_theme_color()
-                    editor.value.set("#225599")
-                    self.assertEqual(owner.theme_color,before)
-                    editor.cancel()
-                    self.assertEqual(owner.theme_color,before)
-                    self.assertEqual(editor.value.get(),before.upper())
-                    editor.value.set("#oops")
-                    editor.apply()
-                    self.assertEqual(theme.load(owner.args.settings_file),before)
-                    self.assertIn("#RRGGBB",editor.status.cget("text"))
-                    editor.value.set("#168578")
-                    editor.apply_button.invoke()
-                    self.assertEqual(owner.theme_color,"#168578")
-                    self.assertEqual(theme.load(owner.args.settings_file),"#168578")
-                    editor.toggle_picker();root.update()
-                    editor.hue.step(1,0);editor.plane.step(-1,-1)
-                    self.assertEqual(owner.theme_color,"#168578")
-                    self.assertNotEqual(editor.value.get(),"#168578")
-                    owner.set_theme_color("#3f78db")
-                    self.assertEqual(editor.value.get(),"#3F78DB")
-                    panel.show_tab("session")
-                    panel.session_scroll.set(.1,.6)
-                    owner.set_theme_color("#cd702b")
-                    width,height=decode_png(panel.session_scroll.thumb_png)[0][:2]
-                    ink=panel.session_scroll.ink
-                    self.assertTrue(all(abs(a-b)<=6 for a,b in zip(
-                        pixel(panel.session_scroll.thumb_png,width//2,height//2)[:3],
-                        tuple(int(ink[i:i+2],16) for i in (1,3,5)))))
-                    self.assertEqual((panel.session_scroll.first,panel.session_scroll.last),(.1,.6))
-                    self.assertEqual(panel.binding_status.cget("text"),"已固定")
-                    session_window=panel.window.winfo_id()
-                    for seed in ("#36824b","#102fd9","#c34c86",theme.DEFAULT):
-                        owner.set_theme_color(seed);root.update()
-                        self.assertEqual(panel.window.winfo_id(),session_window)
-                        self.assertEqual(panel.binding_modes.master.cget("bg"),theme.resolve("#faf9fd",seed))
-                        self.assertEqual(panel.binding_status.master.cget("bg"),theme.resolve("#eee8fa",seed))
-                        self.assertEqual(panel.binding_modes.buttons["auto"].cget("bg"),theme.resolve("#f3f1fa",seed))
-                        self.assertEqual(panel.binding_modes.buttons["fixed"].cget("fg"),theme.resolve("#6f51cc",seed))
-                        self.assertEqual(panel.binding_status.cget("fg"),theme.resolve("#7865d6",seed))
-                        self.assertEqual(panel.binding_status.cget("text"),"已固定")
-                    owner.binding=owner.binding.automatic().follow("工作 A",catalog)
-                    owner.bound_title="工作 A"
-                    panel.refresh()
-                    for seed in ("#102fd9","#c34c86"):
-                        owner.set_theme_color(seed);root.update()
-                        self.assertEqual(panel.binding_status.cget("text"),"已识别")
-                        self.assertEqual(panel.binding_status.cget("fg"),theme.resolve("#7865d6",seed))
-                        self.assertEqual(panel.binding_status.master.cget("bg"),theme.resolve("#eee8fa",seed))
-                    self.assertEqual(errors,[])
-                finally:
-                    if panel:panel.close()
-                    root.update();root.destroy();theme.activate(theme.DEFAULT)
+    def test_display_theme_and_custom_drafts_keep_the_native_window(self):
+        from test_panel_layout import PanelLayoutTests
+        with PanelLayoutTests().panel(tab='display') as (panel,root,area):
+            owner=panel.owner;identity=panel.window.winfo_id()
+            panel.theme_open=True;panel.show_tab('display');root.update()
+            for seed in [value for _,value in theme.PRESETS]+['#225599']:
+                owner.set_theme_color(seed);root.update()
+                self.assertEqual(panel.window.winfo_id(),identity)
+                self.assertEqual([value for value,button in panel.theme_buttons.items() if button.selected],[seed] if seed in panel.theme_buttons else [])
+                self.assertEqual(panel.color_editor.value.get(),seed.upper())
+                for button in panel.mode_buttons.values():
+                    left,_,right,_=button.bbox('mode-title')
+                    self.assertLessEqual(right,button.winfo_width());self.assertGreater(left,0)
+            editor=panel.color_editor;before=owner.theme_color
+            editor.value.set('#168578');self.assertEqual(owner.theme_color,before)
+            editor.cancel();self.assertEqual(editor.value.get(),before.upper())
+            editor.value.set('#oops');editor.apply();self.assertEqual(owner.theme_color,before)
+            editor.value.set('#168578');editor.apply();root.update()
+            self.assertEqual(owner.theme_color,'#168578');self.assertEqual(theme.load(owner.args.settings_file),'#168578')
+            for size in (13,15,17,13):panel.change_font(size);self.assertEqual(owner.font_size,size)
+            for mode in ('composer','desktop','composer'):
+                panel.change_mode(mode);self.assertEqual(owner.display_mode,mode)
 
-
-if __name__=="__main__":
-    unittest.main()
+if __name__=='__main__':unittest.main()

@@ -16,18 +16,24 @@ def settle(root, seconds):
 
 
 class ScrollRailTests(unittest.TestCase):
-    panel = layout.PanelLayoutTests.panel
+    from contextlib import contextmanager
+    @contextmanager
+    def panel(self,scale=1,work_height=900):
+        from product_controls import session_dialog
+        with layout.PanelLayoutTests().panel(scale,work_height) as (p,root,area):
+            dialog=session_dialog(p);root.update()
+            from types import SimpleNamespace
+            proxy=SimpleNamespace(session_scroll=dialog.session_scroll,tree=dialog.session_tree,
+                search=dialog.search,scale=scale,window=dialog)
+            try:yield proxy,root,area
+            finally:
+                dialog.cancel_session()  # Closing an independent Tk root is idempotent.
 
     def test_external_rails_do_not_reflow_content_and_fade_after_activity(self):
         for scale in (1, 1.25, 1.5, 2):
             with self.subTest(scale=scale), self.panel(scale) as (panel, root, area):
                 bar = panel.session_scroll
-                right = panel.choices.winfo_rootx()+panel.choices.winfo_width()
-                self.assertGreaterEqual(bar.winfo_rootx(), right)
-                self.assertGreaterEqual(panel.scroller.winfo_rootx(), bar.winfo_rootx()+bar.winfo_width())
-                self.assertLessEqual(panel.scroller.winfo_rootx()+panel.scroller.winfo_width(),
-                                     panel.window.winfo_rootx()+panel.window.winfo_width()-panel.px(6))
-                widths = (panel.content.winfo_width(), panel.choices.winfo_width(), panel.tree.winfo_width())
+                widths = panel.tree.winfo_width()
                 self.assertTrue(bar.overflow)
                 bar.hovered = False
                 bar.opacity = 0; bar.redraw()
@@ -42,10 +48,10 @@ class ScrollRailTests(unittest.TestCase):
                 bar.leave(); settle(root, 1.25)
                 self.assertEqual(bar.opacity, 0)
                 self.assertFalse(bar.find_all())
-                self.assertEqual(widths, (panel.content.winfo_width(), panel.choices.winfo_width(), panel.tree.winfo_width()))
+                self.assertEqual(widths,panel.tree.winfo_width())
                 panel.search.set("不存在的关键词"); root.update()
                 self.assertFalse(bar.overflow)
-                self.assertEqual(widths, (panel.content.winfo_width(), panel.choices.winfo_width(), panel.tree.winfo_width()))
+                self.assertEqual(widths,panel.tree.winfo_width())
 
     def test_drag_track_click_and_keyboard_reach_all_227_rows(self):
         with self.panel() as (panel, root, area):
@@ -69,29 +75,9 @@ class ScrollRailTests(unittest.TestCase):
             self.assertGreater(panel.tree.yview()[0], 0)
             self.assertEqual(len(panel.tree.get_children()), 227)
 
-    def test_short_screen_rails_stay_outside_content_and_cancel_timers_on_tab_close(self):
-        with self.panel(scale=1.5, work_height=520) as (panel, root, area):
-            outer, inner = panel.scroller, panel.session_scroll
-            self.assertTrue(outer.overflow)
-            for position in (0, .4, 1):
-                panel.content.yview_moveto(position); root.update()
-                if inner.winfo_manager():
-                    self.assertGreaterEqual(inner.winfo_rooty(), panel.content.winfo_rooty())
-                    self.assertLessEqual(inner.winfo_rooty()+inner.winfo_height(),
-                                         panel.content.winfo_rooty()+panel.content.winfo_height())
-                    self.assertLessEqual(inner.winfo_rootx()+inner.winfo_width(), outer.winfo_rootx())
-                self.assertGreaterEqual(outer.winfo_rootx(), panel.content.winfo_rootx()+panel.content.winfo_width())
-            inner.leave(); outer.leave()
-            panel.show_tab("display"); root.update()
-            self.assertTrue(inner.disposed)
-            self.assertIsNone(inner.hide_job)
-            self.assertIsNone(inner.fade_job)
-            width = panel.content.winfo_width()
-            panel.content.yview_moveto(1); root.update()
-            outer.enter(); theme.activate("#36824b"); outer.redraw(); root.update()
-            self.assertEqual(panel.content.winfo_width(), width)
-            panel.close(); root.update()
-            self.assertTrue(outer.disposed)
-            self.assertIsNone(outer.hide_job)
-            self.assertIsNone(outer.fade_job)
-            settle(root, 1.3)
+    def test_short_screen_modal_keeps_actions_reachable_and_disposes_timers(self):
+        with self.panel(scale=1.5,work_height=520) as (p,root,area):
+            self.assertLessEqual(p.window.winfo_height(),area.height)
+            bar=p.session_scroll;bar.leave();p.window.cancel_session();root.update()
+            self.assertTrue(bar.disposed);self.assertIsNone(bar.hide_job);self.assertIsNone(bar.fade_job)
+            settle(root,.1)

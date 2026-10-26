@@ -69,7 +69,7 @@ class SurfaceRecoveryTests(unittest.TestCase):
     def test_backdrop_repair_reorders_existing_layer_without_hiding_or_resizing(self):
         backdrop=Backdrop.__new__(Backdrop)
         backdrop.hwnd=200;backdrop.available=True;backdrop.visible=True
-        rect=Rect(0,0,808,56);backdrop.last_rect=rect;backdrop.size=(796,44)
+        rect=Rect(0,0,808,56);backdrop.last_rect=rect;backdrop.size=(792,40)
         backdrop.instance=1;backdrop.library=Mock();backdrop.moves=backdrop.shows=backdrop.hides=0
         with patch('native_backdrop.user') as user,patch('native_backdrop.win.hide') as hide:
             user.SetWindowPos.return_value=True

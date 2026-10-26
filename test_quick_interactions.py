@@ -32,8 +32,8 @@ class QuickInteractionTests(unittest.TestCase):
         owner.manual = position.copy()
         for index in range(20):
             owner.drag_end(self.press(owner))
-            self.assertEqual(owner.display_mode, "desktop" if index % 2 == 0 else "composer")
-            self.assertTrue(owner.compact)
+            self.assertEqual(owner.display_mode, "composer")
+            self.assertEqual(owner.compact,index % 2 != 0)
             self.assertEqual(owner.manual, position)
             self.assertEqual(owner.binding.identity, "a")
             self.assertTrue(owner.visible)
@@ -55,7 +55,8 @@ class QuickInteractionTests(unittest.TestCase):
         owner.drag_move(event)
         self.assertEqual(owner.last_bounds, before)
         owner.drag_end(event)
-        self.assertEqual(owner.display_mode, "desktop")
+        self.assertEqual(owner.display_mode, "composer")
+        self.assertFalse(owner.compact)
         self.assertIsNone(owner.manual)
 
     def test_real_drag_never_collapses_or_changes_mode_at_each_dpi(self):

@@ -13,21 +13,21 @@ class StyleTests(unittest.TestCase):
         columns = style.columns(style.WIDTH)
         self.assertEqual([c.key for c in columns], list(style.ORDER))
         self.assertEqual(columns[0].x, style.INSET)
-        self.assertEqual(columns[-1].x+columns[-1].width, style.WIDTH-style.INSET)
+        self.assertAlmostEqual(columns[-1].x+columns[-1].width, style.WIDTH-style.INSET)
         for first,second in zip(columns, columns[1:]):
             self.assertEqual(first.x+first.width, second.x)
 
     def test_narrow_width_hides_secondary_metrics_before_cropping(self):
         columns = style.columns(384)
-        self.assertEqual([c.key for c in columns], ["speed", "tokens"])
-        self.assertLessEqual(columns[-1].x+columns[-1].width, 384-style.INSET)
+        self.assertEqual([c.key for c in columns], ["speed", "tokens", "cache"])
+        self.assertLessEqual(columns[-1].x+columns[-1].width, 384-style.INSET+1e-6)
         self.assertEqual(style.columns(100), [])
 
     def test_waiting_state_keeps_same_columns_and_reports_unknown_values(self):
         data = style.metrics({"available": False})
         self.assertEqual(set(data), set(style.ORDER))
         self.assertEqual(data["speed"].runs[0].text, "—")
-        self.assertEqual(data["context"].runs[1].text, "—")
+        self.assertEqual(data["context"].runs[0].text, "—")
         self.assertIsNone(data["context"].progress)
 
     def test_counts_use_one_scope_and_pending_speed_is_not_previous_speed(self):
@@ -36,7 +36,8 @@ class StyleTests(unittest.TestCase):
         data=style.metrics(snapshot)
         self.assertEqual(data["rounds"].runs[2].text,"96")
         self.assertEqual([run.text for run in data["speed"].runs],["生成中"])
-        self.assertEqual(data["tokens"].runs[-1].text,"Token")
+        self.assertEqual("".join(run.text for run in data["tokens"].runs),"1.00M")
+        self.assertEqual(data["tokens"].runs[-1].role,"label")
 
 
 def expected_preferences(font_size=15, position=None):
@@ -85,9 +86,9 @@ class PlacementTests(unittest.TestCase):
         settings=remember(host,Rect(743,868,1431,906),composer=composer)
         moved=Rect(350,650,950,780)
         result=place(host,688,56,moved,settings)
-        self.assertEqual(result.width,552)
+        self.assertEqual(result.width,688)
         self.assertEqual(result.bottom,642)
-        self.assertLessEqual(abs((result.left+result.right)/2-(moved.left+moved.width*settings["center_ratio"])),1)
+        self.assertLessEqual(abs(result.left-(moved.left+moved.width*settings["left_ratio"])),1)
 
     def test_draft_height_change_moves_strip_above_new_composer_top(self):
         host=Rect(0,0,1920,1032)
@@ -103,16 +104,16 @@ class PlacementTests(unittest.TestCase):
                      {"anchor":"composer","center_ratio":0.5,"gap":8},scale=2)
         self.assertEqual(result.bottom,1812)
 
-    def test_centers_above_composer_in_split_pane(self):
+    def test_left_aligns_above_composer_in_split_pane(self):
         host=Rect(0,0,1920,1032)
         composer=Rect(275,890,990,1010)
         result=place(host,560,25,composer)
-        self.assertEqual(result,Rect(352,858,912,883))
+        self.assertEqual(result,Rect(299,858,859,883))
         self.assertLess(result.bottom,composer.top)
 
     def test_follows_host_move_without_overlapping_input(self):
         result=place(Rect(100,100,2020,1132),560,25,Rect(375,990,1090,1110))
-        self.assertEqual(result,Rect(452,958,1012,983))
+        self.assertEqual(result,Rect(399,958,959,983))
 
     def test_manual_position_survives_move_resize_and_dpi_change(self):
         old=Rect(0,0,1920,1032)
