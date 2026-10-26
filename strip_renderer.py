@@ -10,9 +10,11 @@ import ctypes as C
 from ctypes import wintypes as W
 import struct
 import zlib
+from functools import lru_cache
 
 from overlay_style import HEIGHT, ROW_HEIGHT, CELL_PADDING, ICON_SIZE, ICON_GAP, CELL_TRAILING, columns, metrics
 from font_policy import family as ui_font_family
+from font_policy import PRIVATE_FAMILY,private_font_buffers
 import theme
 
 P = C.c_void_p
@@ -76,6 +78,8 @@ for name, args in {
     "GdipDrawLine": [P, P, F, F, F, F],
     "GdipDrawArc": [P, P, F, F, F, F, F, F],
     "GdipCreateFontFamilyFromName": [W.LPCWSTR, P, C.POINTER(P)],
+    "GdipNewPrivateFontCollection": [C.POINTER(P)],
+    "GdipPrivateAddMemoryFont": [P,P,C.c_int],
     "GdipCreateFont": [P, F, C.c_int, C.c_int, C.POINTER(P)],
     "GdipGetCellAscent": [P, C.c_int, C.POINTER(W.WORD)],
     "GdipGetCellDescent": [P, C.c_int, C.POINTER(W.WORD)],
@@ -95,12 +99,26 @@ for name, args in {
 for name in ("GdipDeleteGraphics", "GdipDisposeImage", "GdipDeleteBrush", "GdipDeletePen",
              "GdipDeletePath", "GdipDeleteFont", "GdipDeleteFontFamily", "GdipDeleteStringFormat"):
     bind(name, [P])
+bind('GdipDeletePrivateFontCollection',[C.POINTER(P)])
 
 token = C.c_size_t()
 call("GdiplusStartup", C.byref(token), C.byref(StartupInput(1, None, False, False)), None)
 api.GdiplusShutdown.argtypes = [C.c_size_t]
 api.GdiplusShutdown.restype = None
 atexit.register(lambda: api.GdiplusShutdown(token))
+
+
+@lru_cache(maxsize=1)
+def private_font_collection():
+    if ui_font_family()!=PRIVATE_FAMILY:return None
+    collection=P()
+    call('GdipNewPrivateFontCollection',C.byref(collection))
+    try:
+        for buffer in private_font_buffers():call('GdipPrivateAddMemoryFont',collection,buffer,C.sizeof(buffer)-1)
+    except Exception:
+        call('GdipDeletePrivateFontCollection',C.byref(collection));raise
+    atexit.register(lambda:api.GdipDeletePrivateFontCollection(C.byref(collection)))
+    return collection
 
 
 def color(value):
@@ -124,11 +142,11 @@ class Renderer:
         call("GdipSetSmoothingMode", self.g, 4)
         call("GdipSetTextRenderingHint", self.g, 3)
         call("GdipScaleWorldTransform", self.g, scale*self.samples, scale*self.samples, 0)
-        self.family = self.new("GdipCreateFontFamilyFromName", "GdipDeleteFontFamily", ui_font_family(), None)
+        self.family = self.new("GdipCreateFontFamilyFromName", "GdipDeleteFontFamily", ui_font_family(), private_font_collection())
         self.format = self.new("GdipStringFormatGetGenericTypographic", "GdipDeleteStringFormat")
         call("GdipSetStringFormatFlags", self.format, 0x1800)
-        ascent, descent = self.font_metrics(16)
-        self.baseline = (HEIGHT-ascent-descent)/2+ascent
+        ascent, descent = self.font_metrics(15)
+        self.baseline = (self.height/self.scale-ascent-descent)/2+ascent
         self.diagnostics = []
 
     def new(self, name, cleanup, *args):
@@ -157,8 +175,11 @@ class Renderer:
 
     def font(self, role):
         if role not in self.fonts:
-            self.fonts[role] = self.new("GdipCreateFont", "GdipDeleteFont", self.family, 14 if role == "label" else 16,
-                                        1 if role in ("speed","status","value","brand") else 0, 2)
+            font_family=self.family
+            if role=='secondary' and ui_font_family()=='Noto Sans SC':
+                font_family=self.new('GdipCreateFontFamilyFromName','GdipDeleteFontFamily','Noto Sans SC Medium',None)
+            self.fonts[role] = self.new("GdipCreateFont", "GdipDeleteFont", font_family, 11.7 if role == "label" else 15,
+                                        1 if role in ("speed","status","value","brand") or role=='secondary' and ui_font_family()==PRIVATE_FAMILY else 0, 2)
         return self.fonts[role]
 
     def font_metrics(self, size, bold=0):
@@ -180,14 +201,16 @@ class Renderer:
         if role not in self.text_tops:
             # Stable optical centering by role, independent of the current
             # number's glyphs. Font em/ascent boxes are not visible ink bounds.
-            sample = "Token 缓存 上下文 轮 次" if role == "label" else "生成中" if role == "status" else "Pulse" if role == "brand" else "0123456789"
+            sample = "M%dh/" if role == "label" else "生成中" if role == "status" else "Pulse" if role == "brand" else "0123456789"
             path = self.new("GdipCreatePath","GdipDeletePath",0)
-            size = 14 if role == "label" else 16
-            weight = 1 if role in ("speed","status","value","brand") else 0
+            size = 11.7 if role == "label" else 15
+            weight = 1 if role in ("speed","status","value","brand") or role=='secondary' and ui_font_family()==PRIVATE_FAMILY else 0
             call("GdipAddPathString",path,sample,-1,self.family,weight,size,C.byref(RectF(0,0,1000,100)),self.format)
             bounds=RectF()
             call("GdipGetPathWorldBounds",path,C.byref(bounds),None,None)
-            self.text_tops[role]=(HEIGHT-bounds.height)/2-bounds.y
+            # Smaller units sit one logical pixel below the number's optical
+            # centre. A shared alphabetic ascent pushed %, / and d/h too low.
+            self.text_tops[role]=(self.height/self.scale-bounds.height)/2-bounds.y+(1 if role=='label' else 0)
         return self.text_tops[role]
 
     def svg(self, name, x, y, width, height):
@@ -232,8 +255,9 @@ class Renderer:
         self.svg("glass-frosted.svg" if snapshot and snapshot.get("backdrop") else "glass.svg", 4, 4, width-8, ROW_HEIGHT)
         if snapshot and snapshot.get("capsule"):
             available = snapshot.get("available")
-            value = "生成中" if snapshot.get("request_pending") else (
+            value = snapshot.get("capsule_status") or ("生成中" if snapshot.get("request_pending") else (
                 f"≈ {snapshot['latest_tps_estimate']:.1f}" if available and snapshot.get("latest_tps_estimate") is not None else "待命")
+            )
             self.svg("wave.svg",38,HEIGHT/2-12,24,24)
             self.text(70, type("Run", (), {"text":"Pulse", "role":"brand", "gap":5})())
             self.text(123, type("Run", (), {"text":"· "+value, "role":"label", "gap":0})())
@@ -241,6 +265,10 @@ class Renderer:
         else:
             cells = None
         data = metrics(snapshot)
+        if not data and not (snapshot or {}).get('capsule'):
+            from overlay_style import Run
+            empty=Run('未选择显示指标','label')
+            self.text((width-self.measure(empty))/2,empty)
         text_inset = CELL_PADDING+ICON_SIZE+ICON_GAP
         minimums = {key: sum(self.measure(run)+run.gap for run in metric.runs)-metric.runs[-1].gap+text_inset+CELL_TRAILING
                     for key,metric in data.items()}
@@ -260,7 +288,7 @@ class Renderer:
                 x += self.measure(run)
                 end = x
             else:
-                self.icon(cell.key, cell.x+CELL_PADDING+ICON_SIZE/2, metric.progress)
+                self.icon({"recent":"context","quota":"context","reset":"cache","credits":"tokens"}.get(cell.key,cell.key), cell.x+CELL_PADDING+ICON_SIZE/2, metric.progress)
                 x = cell.x+text_inset
                 for run in metric.runs:
                     self.text(x, run)
@@ -288,7 +316,8 @@ class Renderer:
         call("GdipSetTextRenderingHint", graphics, 3)
         call("GdipScaleWorldTransform", graphics, self.scale, self.scale, 0)
         for x, run, baseline in self.text_runs:
-            ink = METRIC_INK if run.text.strip()=="—" or run.role=="label" else "#8653ec" if run.role in ("speed","status") else "#181637"
+            palette=theme.statistics_palette()
+            ink=palette['icon'] if run.text.strip()=='—' or run.role=='label' else palette['secondary'] if run.role=='secondary' else palette['value']
             px = round(x*self.scale)/self.scale
             top = round(self.text_top(run.role)*self.scale)/self.scale
             call("GdipDrawString", graphics, run.text, -1, self.font(run.role),
@@ -312,9 +341,14 @@ class Renderer:
 
 
 def render(snapshot, width, scale=1, hovered=False):
-    renderer = Renderer(width, scale)
+    font=(snapshot or {}).get('font_size',15)
+    density={13:36,15:40,17:44}.get(font,40)
+    renderer = Renderer(width, scale, height=round(density*scale/(font/15)))
     try:
         renderer.draw(snapshot,hovered)
         return renderer.png(), renderer.diagnostics
     finally:
         renderer.close()
+
+from product_strip import install_renderer
+install_renderer(Renderer)

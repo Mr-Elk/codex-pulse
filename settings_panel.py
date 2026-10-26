@@ -8,14 +8,19 @@ from tkinter import ttk
 import overlay_style as style
 import thread_catalog
 import theme
+import ui_tokens as ui
 from svg_art import render_asset
-from font_policy import family
+from font_policy import widget_family as family
 from scroll_rail import SlimScrollbar
 from panel_widgets import Segmented, Surface, ModeCard, SearchField, ActionButton
 
-BG, INK, MUTED = "#ffffff", "#1e2238", "#6f7691"
+BG, INK, MUTED = "#ffffff", "#233955", "#607088"
 ACCENT, TINT, LINE = "#7865d6", "#f3f1fa", "#eeedf5"
 METRICS = {
+    "recent": ("最近用量", "按关注窗口的百分点估算"),
+    "quota": ("剩余额度", "所选账户额度窗口"),
+    "reset": ("自然重置", "官方时间与倒计时"),
+    "credits": ("重置卡", "官方可用数量"),
     "speed": ("TPS", "最近完成请求的平均估算"),
     "tokens": ("Token", "输入与输出累计，含重复上下文"),
     "cache": ("缓存命中率", "最近请求的已缓存输入占比"),
@@ -25,59 +30,166 @@ METRICS = {
 
 
 class VectorButton(tk.Button):
-    """Native button text and keyboard behavior over a scalable SVG surface."""
-    def __init__(self, parent, text, command, scale, quiet=False, color=ACCENT, surface_bg=BG, height=38, font_size=13):
-        self.scale, self.fill = scale, BG if quiet else TINT
-        self.text_color, self.quiet = color, quiet
-        font = (family(), -round(font_size*scale))
-        measured = tkfont.Font(master=parent, font=font).measure(text)
-        self.draw_width, self.draw_height = measured+round(24*scale), round(height*scale)
-        super().__init__(parent, text=text, command=command, relief="flat", bd=0,
-                         bg=theme.color(surface_bg), fg=theme.color(color), activebackground=theme.color(surface_bg), activeforeground=theme.color(ACCENT),
-                         disabledforeground=theme.color("#aaa5ba"),
-                         cursor="hand2", takefocus=True, font=font, compound="center",
-                         highlightthickness=0, padx=0, pady=0)
-        self.bind("<Configure>", self.resize)
+    """Native action semantics with one crisp caption for every visual state."""
+    def __init__(self,parent,text,command,scale,quiet=False,color=ACCENT,surface_bg=BG,height=34,font_size=13,min_width=0,outlined=False,variant=None,text_anchor='center',tab_stop=True):
+        self.variant=variant or ('secondary' if outlined else 'text' if quiet else 'primary')
+        quiet=self.variant!='primary';outlined=outlined or self.variant=='secondary'
+        self.scale,self.fill=scale,BG if quiet else theme.current()
+        self.text_color,self.quiet=color,quiet
+        self.minimum_width,self.outlined=round(min_width*scale),outlined
+        self.text_anchor,self.tab_stop=text_anchor,tab_stop
+        self.hovered=self.pressed=self.pointer_focus=False
+        self.width_padding=16 if self.variant=='text' else 24
+        self.normal_caption=self.inactive_caption=self.disabled_face=None
+        font=(family(),-round(font_size*scale))
+        self.draw_width=max(self.minimum_width,tkfont.Font(root=parent,font=font).measure(text)+round(self.width_padding*scale))
+        self.draw_height=round(height*scale)
+        super().__init__(parent,text=text,command=command,relief='flat',overrelief='flat',default='disabled',bd=0,
+            bg=theme.color(surface_bg),fg=theme.color(color) if quiet else BG,
+            activebackground=theme.color(surface_bg),activeforeground=theme.color(color) if quiet else BG,
+            disabledforeground='#69788d',cursor='hand2',takefocus=False,font=font,compound='center',
+            highlightthickness=0,padx=0,pady=0)
+        self.bind('<Configure>',self.resize)
+        self.bind('<Destroy>',self.dispose_caption,add='+')
+        self.bind('<Enter>',self.enter);self.bind('<Leave>',self.leave)
+        self.bind('<FocusIn>',lambda _:self.redraw());self.bind('<FocusOut>',self.focus_out)
+        self.bind('<ButtonPress-1>',self.pointer_press);self.bind('<ButtonRelease-1>',self.pointer_release)
+        self.bind('<KeyPress-space>',self.key_press);self.bind('<KeyRelease-space>',self.key_release)
+        self.bind('<Return>',lambda _:self.activate())
         self.redraw()
-
+    def caption(self,disabled):
+        name='inactive_caption' if disabled else 'normal_caption'
+        label=getattr(self,name)
+        if label is None:
+            label=tk.Label(self.master,bd=0,padx=0,pady=0,highlightthickness=0,takefocus=False)
+            for event,handler in (('<Enter>',self.enter),('<Leave>',self.leave),
+                ('<ButtonPress-1>',self.pointer_press),('<ButtonRelease-1>',self.pointer_release)):
+                label.bind(event,handler)
+            label.bind('<FocusIn>',lambda _:self.redraw());label.bind('<FocusOut>',self.focus_out)
+            label.bind('<KeyPress-space>',self.key_press);label.bind('<KeyRelease-space>',self.key_release)
+            label.bind('<Return>',lambda _:self.activate())
+            setattr(self,name,label)
+        return label
+    def dispose_caption(self,event):
+        if event.widget is self:
+            for caption in (self.normal_caption,self.inactive_caption,self.disabled_face):
+                if caption is not None and caption.winfo_exists():caption.destroy()
+    def focus_set(self):
+        # Focus the caption rather than the native bitmap button: Windows
+        # otherwise draws its own square focus rectangle over the round one.
+        if self.cget('state')!='disabled':self.caption(False).focus_set()
+    def focus_force(self):
+        if self.cget('state')!='disabled':self.caption(False).focus_force()
+    def enter(self,event=None):
+        self.hovered=self.cget('state')!='disabled';self.redraw()
+    def leave(self,event=None):
+        if event is not None and event.type==tk.EventType.Destroy:return
+        if event is not None:
+            x,y=self.winfo_pointerxy()
+            if self.winfo_rootx()<=x<self.winfo_rootx()+self.winfo_width() and self.winfo_rooty()<=y<self.winfo_rooty()+self.winfo_height():return
+        self.hovered=False;self.redraw()
+    def pointer_press(self,event):
+        if self.cget('state')!='disabled':
+            self.pointer_focus=True
+            self.focus_set();self.pressed=True;self.redraw()
+        return 'break'
+    def focus_out(self,event=None):
+        self.pointer_focus=False;self.redraw()
+    def pointer_release(self,event):
+        pressed=self.pressed;self.pressed=False;self.redraw()
+        inside=self.winfo_rootx()<=event.x_root<self.winfo_rootx()+self.winfo_width() and self.winfo_rooty()<=event.y_root<self.winfo_rooty()+self.winfo_height()
+        if pressed and inside:self.activate()
+        return 'break'
+    def key_press(self,event):
+        if self.cget('state')!='disabled':self.pressed=True;self.redraw()
+        return 'break'
+    def key_release(self,event):
+        pressed=self.pressed;self.pressed=False;self.redraw()
+        if pressed:self.activate()
+        return 'break'
+    def activate(self):
+        self.invoke();return 'break'
     def redraw(self):
-        if self.cget("state")=="disabled":
-            # Windows stipples a disabled button bitmap. Keep a transparent
-            # sizing image so its inactive text stays clean and readable.
-            self.art=tk.PhotoImage(master=self,width=max(2,self.draw_width),height=self.draw_height)
+        if not self.winfo_exists():return
+        disabled=self.cget('state')=='disabled';focus=self.focus_get()
+        focused=not disabled and not self.pointer_focus and focus is not None and focus in (self,self.normal_caption)
+        background=self.cget('background')
+        signature=(self.draw_width,self.draw_height,disabled,focused,self.hovered,self.pressed,theme.current(),background,self.cget('text'),self.cget('font'),self.cget('foreground'))
+        if signature==getattr(self,'paint_signature',None):return
+        self.paint_signature=signature
+        if disabled:fill=background if self.quiet else '#edf1f6';ink='#69788d'
+        elif self.quiet:
+            fill=theme.color(TINT) if self.hovered or self.pressed else background
+            ink=self.cget('foreground')
         else:
-            png = render_asset("control.svg", max(2,self.draw_width), self.draw_height, self.scale, self.fill,self.cget("background"))
-            self.art = tk.PhotoImage(master=self, data=base64.b64encode(png))
+            fill=theme.color('#7046c4' if self.pressed else '#7d4ed9') if self.pressed or self.hovered else theme.current()
+            fill=theme.action_fill(fill);self.fill=fill;ink=theme.action_ink(fill)
+        from strip_renderer import Renderer,call,color
+        r=Renderer(max(2,self.draw_width),self.scale,height=self.draw_height)
+        try:
+            call('GdipGraphicsClear',r.g,color(background))
+            width,height=self.draw_width/self.scale,self.draw_height/self.scale
+            radius=ui.TEXT_ACTION_RADIUS if self.variant=='text' else 6 if self.variant=='icon' else ui.ACTION_RADIUS
+            border=theme.current() if focused and self.variant in ('secondary','icon') else '#a9bfdc' if self.outlined and self.hovered else '#d8e2f0' if self.outlined else None
+            r.rounded(.7,.7,width-1.4,height-1.4,min(radius,(height-1.4)/2),fill,border)
+            if getattr(self,'icon_key',None)=='refresh':
+                from svg_art import paint
+                paint(r,'refresh.svg',(width-18)/2,(height-18)/2,18,18,{'currentColor':ink})
+            if focused and self.variant=='primary':r.rounded(2.5,2.5,width-5,height-5,min(6,(height-5)/2),fill,ink)
+            if focused and self.variant=='text':
+                text_width=tkfont.Font(root=self,font=self.cget('font')).measure(self.cget('text'))/self.scale
+                left=8 if self.text_anchor=='w' else (width-text_width)/2
+                r.line(left,height-3,min(width-2,left+text_width),height-3,ink)
+            self.art=tk.PhotoImage(master=self,data=base64.b64encode(r.png()))
+        finally:r.close()
         super().configure(image=self.art)
-
-    def resize(self, event):
-        if event.width > 1 and event.width != self.draw_width:
-            self.draw_width = event.width
-            self.redraw()
-
-    def configure(self, cnf=None, **kwargs):
-        if cnf is not None:
-            return super().configure(cnf, **kwargs)
-        repaint = False
-        if "state" in kwargs and kwargs["state"]!=self.cget("state"):
-            repaint=True
-        if "bg" in kwargs:
-            fill = kwargs.pop("bg")
-            repaint = self.fill != fill
-            self.fill = fill
-        if "text" in kwargs and kwargs["text"] != self.cget("text"):
-            font = tkfont.Font(master=self, font=self.cget("font"))
-            self.draw_width = font.measure(kwargs["text"])+round(24*self.scale)
-            repaint = True
-        result = super().configure(**kwargs)
-        if repaint:
-            self.redraw()
+        # The true native button stays disabled when appropriate. A normal
+        # Label displays the caption without Tk bitmap stippling or its square
+        # native focus rectangle; mouse input still invokes the native action.
+        # Tk stipples the entire image of a disabled native Button. Cover that
+        # surface with a normal Label, while leaving native state disabled and
+        # all input inert. The caption is lifted above this clean face.
+        if disabled:
+            if self.disabled_face is None:
+                self.disabled_face=tk.Label(self.master,bd=0,padx=0,pady=0,highlightthickness=0,takefocus=False)
+            self.disabled_face.configure(image=self.art,bg=background)
+            self.disabled_face.place(in_=self,x=0,y=0,width=self.draw_width,height=self.draw_height)
+            self.disabled_face.lift(self)
+        elif self.disabled_face is not None:self.disabled_face.place_forget()
+        label=self.caption(disabled)
+        if getattr(self,'icon_key',None):
+            label.configure(text='',image=self.art,bg=background,takefocus=not disabled and self.tab_stop,cursor='arrow' if disabled else 'hand2')
+            label.place(in_=self,x=0,y=0,width=self.draw_width,height=self.draw_height);label.lift(self.disabled_face if disabled else self)
+            other=self.normal_caption if disabled else self.inactive_caption
+            if other is not None:other.place_forget()
+            return
+        label.configure(text=self.cget('text'),font=self.cget('font'),fg=ink,
+            bg=fill,image='',takefocus=not disabled and self.tab_stop,cursor='arrow' if disabled else 'hand2')
+        face=tkfont.Font(root=self,font=self.cget('font'));caption_width=face.measure(self.cget('text'))+2;caption_height=face.metrics('linespace')
+        left=round(8*self.scale) if self.text_anchor=='w' else (self.draw_width-caption_width)//2
+        label.place(in_=self,x=left,y=(self.draw_height-caption_height)//2,width=min(caption_width,self.draw_width),height=caption_height);label.lift(self.disabled_face if disabled else self)
+        other=self.normal_caption if disabled else self.inactive_caption
+        if other is not None:other.place_forget()
+    def resize(self,event):
+        if event.width>1 and event.height>1 and (event.width,event.height)!=(self.draw_width,self.draw_height):
+            self.draw_width,self.draw_height=event.width,event.height;self.redraw()
+    def configure(self,cnf=None,**kwargs):
+        if cnf is not None:return super().configure(cnf,**kwargs)
+        repaint=bool(set(kwargs)&{'state','text','font','foreground','fg','background','bg'})
+        if 'state' in kwargs:
+            enabled=str(kwargs['state'])!='disabled';kwargs['takefocus']=False
+            if not enabled:self.hovered=self.pressed=False
+        if 'text' in kwargs and kwargs['text']!=self.cget('text'):
+            measured=max(self.minimum_width,tkfont.Font(root=self,font=self.cget('font')).measure(kwargs['text'])+round(self.width_padding*self.scale))
+            self.draw_width=max(measured,self.winfo_width()) if self.winfo_manager()=='pack' and self.pack_info().get('fill') in ('x','both') else measured
+        result=super().configure(**kwargs)
+        if repaint:self.redraw()
         return result
 
 
 class ThemeButton(tk.Canvas):
     """A fixed seed swatch with themed selection and keyboard activation."""
-    def __init__(self, parent, name, seed, command, scale, surface_bg):
+    def __init__(self, parent, name, seed, command, scale, surface_bg=BG):
         super().__init__(parent, width=round(88*scale), height=round(36*scale),
                          bg=theme.color(surface_bg), bd=0, highlightthickness=0,
                          takefocus=True, cursor="hand2")
@@ -127,65 +239,118 @@ class ThemeButton(tk.Canvas):
 
 
 class CloseButton(VectorButton):
-    def __init__(self, parent, command, scale):
-        super().__init__(parent, "×", command, scale, quiet=True, color=MUTED, height=36)
+    def __init__(self, parent, command, scale,icon=None,label='关闭'):
+        self.icon_key,self.tooltip_text=icon,label
+        super().__init__(parent,label if icon else "×",command,scale,quiet=True,color=MUTED,height=ui.ICON_ACTION_SIZE,variant='icon')
         self.configure(font=(family(), -round(23*scale)))
-        self.draw_width=round(36*scale)
+        self.draw_width=round(32*scale)
         self.tip=None;self.tip_job=None
         self.redraw()
         self.bind("<Enter>", self.enter)
         self.bind("<Leave>", self.leave)
-        self.bind("<Destroy>", self.leave)
+        self.bind("<Destroy>", self.leave,add="+")
 
-    def enter(self, _):
-        self.configure(bg=theme.color(TINT), fg=theme.color(ACCENT))
+    def enter(self, event=None):
+        super().enter(event)
+        if self.tip_job:self.after_cancel(self.tip_job)
         self.tip_job=self.after(550,self.show_tip)
 
     def show_tip(self):
         self.tip_job=None
-        self.tip=tk.Toplevel(self)
-        self.tip.overrideredirect(True)
+        self.tip=tk.Toplevel(self);self.tip.withdraw();self.tip.overrideredirect(True)
+        self.tip.transient(self.winfo_toplevel())
+        from panel_chrome import PopupCard
+        self.tip.pulse_card=PopupCard(self.tip,self.scale,padx=8,pady=4)
+        tk.Label(self.tip.pulse_card.body,text=self.tooltip_text,font=(family(),-round(12*self.scale)),
+                 bg=theme.color(BG),fg=theme.color(INK),bd=0,padx=0,pady=0).pack()
         self.tip.geometry(f"+{self.winfo_rootx()}+{self.winfo_rooty()+self.winfo_height()+4}")
-        tk.Label(self.tip,text="关闭",font=(family(),-round(12*self.scale)),
-                 bg=theme.color(INK),fg=theme.color(BG),padx=8,pady=4).pack()
+        self.tip.update_idletasks();self.tip.pulse_card.resize();self.tip.deiconify()
 
     def leave(self, event=None):
         if self.tip_job:self.after_cancel(self.tip_job);self.tip_job=None
         if self.tip:self.tip.destroy();self.tip=None
-        if event is None or event.type != tk.EventType.Destroy:self.configure(bg=theme.color(BG),fg=theme.color(MUTED))
+        super().leave(event)
+
+
+class IconButton(CloseButton):
+    def __init__(self,parent,command,scale,icon='refresh',label='刷新账户数据'):
+        super().__init__(parent,command,scale,icon,label)
 
 
 class Toggle(tk.Canvas):
-    """A keyboard-operable native toggle bound to the existing preference variable."""
-    def __init__(self, parent, variable, command, scale):
-        self.variable, self.command, self.scale = variable, command, scale
-        self.width, self.height = round(44*scale), round(26*scale)
-        super().__init__(parent, width=self.width, height=self.height, bg=theme.color(BG),
-                         bd=0, highlightthickness=1, highlightbackground=theme.color(BG),
-                         highlightcolor=theme.color(ACCENT), takefocus=True, cursor="hand2")
-        self.trace = variable.trace_add("write", lambda *_: self.draw())
-        self.bind("<Button-1>", self.toggle)
-        self.bind("<space>", self.toggle)
-        self.bind("<Return>", self.toggle)
-        self.bind("<Destroy>", self.dispose)
-        self.draw()
-
+    """One switch surface, with an unclipped pill and a separate focus ring."""
+    def __init__(self,parent,variable,command,scale):
+        self.variable,self.command,self.scale=variable,command,scale
+        self.width,self.height=round(ui.SWITCH_TARGET_WIDTH*scale),round(ui.SWITCH_TARGET_HEIGHT*scale)
+        self.hovered=self.pressed=self.pointer_focus=False
+        self.knob=float(bool(variable.get()));self.goal=self.knob;self.animation_job=None
+        super().__init__(parent,width=self.width,height=self.height,bg=parent.cget('background'),
+                         bd=0,highlightthickness=0,takefocus=True,cursor='hand2')
+        self.trace=variable.trace_add('write',lambda *_:self.animate())
+        self.bind('<ButtonPress-1>',self.press);self.bind('<ButtonRelease-1>',self.release)
+        self.bind('<KeyPress-space>',self.key_press);self.bind('<KeyRelease-space>',self.key_release)
+        self.bind('<KeyPress-Return>',self.key_press);self.bind('<KeyRelease-Return>',self.key_release)
+        self.bind('<Enter>',lambda _:self.hover(True));self.bind('<Leave>',lambda _:self.hover(False))
+        self.bind('<FocusIn>',lambda _:self.draw());self.bind('<FocusOut>',self.blur)
+        self.bind('<Destroy>',self.dispose);self.draw()
+    def enabled(self):return self.cget('state')!='disabled'
     def draw(self):
-        enabled = bool(self.variable.get())
-        png = render_asset("toggle-on.svg" if enabled else "toggle-off.svg", self.width,self.height,self.scale)
-        self.art = tk.PhotoImage(master=self, data=base64.b64encode(png))
-        if not hasattr(self, "item"):
-            self.item = self.create_image(1,1,anchor="nw",image=self.art)
-        else:
-            self.itemconfigure(self.item,image=self.art)
-
-    def toggle(self, _=None):
-        self.variable.set(not self.variable.get())
-        self.command()
-        return "break"
-
-    def dispose(self, _):
-        self.variable.trace_remove("write", self.trace)
+        from strip_renderer import Renderer,call,color
+        renderer=Renderer(self.width,self.scale,height=self.height)
+        try:
+            call('GdipGraphicsClear',renderer.g,color(self.cget('background')))
+            active=self.enabled();focus=active and self.focus_get()==self and not self.pointer_focus
+            if focus:renderer.rounded(.5,2.5,ui.SWITCH_TARGET_WIDTH-1,ui.SWITCH_TARGET_HEIGHT-5,15,self.cget('background'),theme.current())
+            fill=theme.current() if self.variable.get() else '#cdd5e1'
+            if not active:fill='#b9c4d8' if self.variable.get() else '#e4e9f0'
+            elif self.hovered:fill=theme.action_fill(fill) if self.variable.get() else '#bac6d8'
+            x=(ui.SWITCH_TARGET_WIDTH-ui.SWITCH_WIDTH)/2;y=(ui.SWITCH_TARGET_HEIGHT-ui.SWITCH_HEIGHT)/2
+            renderer.rounded(x,y,ui.SWITCH_WIDTH,ui.SWITCH_HEIGHT,ui.SWITCH_HEIGHT/2,fill)
+            inset=(ui.SWITCH_HEIGHT-ui.SWITCH_THUMB)/2
+            renderer.ellipse(x+inset+(ui.SWITCH_WIDTH-ui.SWITCH_HEIGHT)*self.knob,y+inset,ui.SWITCH_THUMB,ui.SWITCH_THUMB,'#ffffff',True)
+            self.art=tk.PhotoImage(master=self,data=base64.b64encode(renderer.png()))
+        finally:renderer.close()
+        if not hasattr(self,'item'):self.item=self.create_image(0,0,anchor='nw',image=self.art)
+        else:self.itemconfigure(self.item,image=self.art)
+    def hover(self,value):self.hovered=value and self.enabled();self.draw()
+    def blur(self,event=None):self.pointer_focus=self.pressed=False;self.draw()
+    def press(self,event):
+        if self.enabled():self.pointer_focus=True;self.focus_set();self.pressed=True;self.draw()
+        return 'break'
+    def release(self,event):
+        pressed=self.pressed;self.pressed=False
+        if pressed and 0<=event.x<self.winfo_width() and 0<=event.y<self.winfo_height():return self.toggle()
+        self.draw();return 'break'
+    def key_press(self,event):
+        if self.enabled():self.pointer_focus=False;self.pressed=True;self.draw()
+        return 'break'
+    def key_release(self,event):
+        pressed=self.pressed;self.pressed=False
+        if pressed:return self.toggle()
+        return 'break'
+    def animate(self):
+        import time
+        self.start_knob=self.knob;self.goal=float(bool(self.variable.get()));self.started=time.monotonic()
+        if self.animation_job:self.after_cancel(self.animation_job)
+        self.step_animation()
+    def step_animation(self):
+        import time
+        self.animation_job=None;t=min(1,(time.monotonic()-self.started)/.12);eased=1-(1-t)**3
+        self.knob=self.start_knob+(self.goal-self.start_knob)*eased;self.draw()
+        if t<1:self.animation_job=self.after(16,self.step_animation)
+    def toggle(self,event=None):
+        if self.enabled():self.variable.set(not self.variable.get());self.command()
+        return 'break'
+    def configure(self,cnf=None,**kw):
+        if cnf is not None:return super().configure(cnf,**kw)
+        if 'state' in kw:kw['takefocus']=str(kw['state'])!='disabled';kw['cursor']='hand2' if kw['takefocus'] else 'arrow';self.pressed=False
+        result=super().configure(**kw)
+        if 'state' in kw and hasattr(self,'trace'):self.draw()
+        return result
+    def dispose(self,event):
+        if event.widget is not self:return
+        if self.animation_job:self.after_cancel(self.animation_job);self.animation_job=None
+        self.variable.trace_remove('write',self.trace)
 
 
 class SettingsPanel:
@@ -198,6 +363,7 @@ class SettingsPanel:
         self.preview_key = None
         self.focus_check = None
         self.catalog_job = None
+        self.quota_job = None
         # A separate Tcl/Tk root avoids Toplevel creation/focus mutating the
         # withdrawn Tk root that hosts our externally painted layered HWND.
         self.window = tk.Tk()
@@ -207,29 +373,25 @@ class SettingsPanel:
         self.window.configure(bg=theme.color(LINE))
         self.window.title("Codex Pulse 设置")
         self.window.protocol("WM_DELETE_WINDOW", self.close)
-        self.window.bind("<Escape>", lambda _: self.close())
+        self.window.bind("<Escape>", self.escape)
         self.shell = tk.Frame(self.window, bg=theme.color(BG))
         self.shell.pack(fill="both", expand=True, padx=1, pady=1)
         self.header = tk.Frame(self.shell, bg=theme.color(BG))
-        self.header.pack(fill="x", padx=self.px(20), pady=(self.px(14), self.px(10)))
+        self.header.pack(fill="x", padx=self.px(20))
+        self.header.configure(height=self.px(72));self.header.pack_propagate(False)
         self.logo = tk.PhotoImage(master=self.window, data=base64.b64encode(
-            render_asset("brand.svg",self.px(36),self.px(36),self.scale)))
-        self.logo_label=tk.Label(self.header, image=self.logo, bg=theme.color(BG))
-        self.logo_label.pack(side="left", padx=(0, self.px(10)))
-        self.label(self.header, "Codex Pulse", 20, bold=True).pack(side="left")
+            render_asset("brand.svg",self.px(34),self.px(34),self.scale)))
+        self.logo_label=tk.Label(self.header, image=self.logo, bg=theme.color(BG),bd=0,padx=0,pady=0)
+        self.logo_label.pack(side="left", padx=(0, self.px(12)))
+        self.brand_title=self.label(self.header, "Codex Pulse", 21, bold=True)
+        self.brand_title.place(x=self.px(46),y=self.px(22),height=self.px(28))
         self.close_button=CloseButton(self.header,self.close,self.scale)
         self.close_button.pack(side="right")
-        self.tabs = Segmented(self.shell,(("strip","统计条"),("display","显示"),("session","会话")),self.show_tab,self.scale,font_size=15)
+        self.tabs = Segmented(self.shell,(("strip","统计条"),("quota","账户"),("display","显示")),self.show_tab,self.scale,font_size=14,height=ui.MAIN_NAV_HEIGHT)
         self.tabs.pack(fill="x", padx=self.px(16))
         self.tab_buttons = self.tabs.buttons
-        self.rule(self.shell, pad=16)
-        footer = tk.Frame(self.shell, bg=theme.color(BG))
-        footer.pack(side="bottom", fill="x", padx=self.px(16), pady=(0, self.px(12)))
-        self.button(footer, "恢复默认位置", self.reset_position, quiet=True, font_size=14).pack(side="left")
-        self.button(footer, "统计口径", lambda: self.show_tab("help"), quiet=True, font_size=14).pack(side="left")
-        self.button(footer, "关闭统计条", owner.close, quiet=True, color=MUTED, font_size=14).pack(side="right")
         content_host = tk.Frame(self.shell, bg=theme.color(BG))
-        content_host.pack(fill="both", expand=True, padx=(self.px(20),self.px(32)), pady=self.px(8))
+        content_host.pack(fill="both", expand=True, padx=(self.px(ui.PAGE_LEFT),self.px(ui.PAGE_RIGHT)), pady=(self.px(ui.PAGE_TOP),self.px(ui.PAGE_BOTTOM)))
         self.content = tk.Canvas(content_host, bg=theme.color(BG), bd=0, highlightthickness=0, height=1)
         self.content.pack(side="left", fill="both", expand=True)
         # Rails live in the shell margin, never inside the content canvas/cards.
@@ -242,25 +404,36 @@ class SettingsPanel:
         self.body.bind("<Configure>", lambda _: self.update_scroll())
         self.content.bind("<Configure>", self.resize_content)
         self.window.bind("<MouseWheel>", self.scroll)
-        self.show_tab(tab if tab in ("strip","display","session") else "strip")
+        self.show_tab(tab if tab in ("strip","quota","display") else "strip")
         self.refresh()
         self.window.update_idletasks()
         self.content.configure(height=self.body.winfo_reqheight())
         self.window.update_idletasks()
-        width, height = self.px(480), self.px(780)
+        width, height = self.px(ui.PANEL_WIDTH), self.px(ui.PANEL_HEIGHT)
         area = owner.win.work_area(owner.target["hwnd"]) if owner.target else None
         if area is None:
             from overlay_geometry import Rect
             area = Rect(0, 0, self.window.winfo_screenwidth(), self.window.winfo_screenheight())
         margin = min(self.px(12), max(0, (area.height-self.px(320))//2))
         width, height = min(width, area.width), min(height, area.height-2*margin)
-        left = max(area.left, min(x-width+self.px(24), area.right-width))
-        top = max(area.top+margin, min(y-height-self.px(10), area.bottom-margin-height))
-        self.window.geometry(f"{width}x{height}{left:+d}{top:+d}")
+        from overlay_geometry import Rect,panel_bounds
+        anchor=getattr(owner,'last_bounds',None)
+        if not isinstance(anchor,Rect):anchor=Rect(x,y,x,y)
+        self.bounds=panel_bounds(area,anchor,width,height,self.scale)
+        left,top,width,height=self.bounds.left,self.bounds.top,self.bounds.width,self.bounds.height
+        # A leading '-' means distance from the screen's right/bottom in Tk.
+        # Explicit '+' offsets preserve absolute negative virtual coordinates.
+        self.window.geometry(f"{width}x{height}+{left}+{top}")
         self.window.update_idletasks()
         self.hwnd = owner.win.top_level(self.window.winfo_id())
-        from panel_chrome import Chrome
-        self.chrome = Chrome(self.hwnd)
+        from panel_chrome import Chrome,RoundedRegion
+        self.chrome = Chrome(self.hwnd,framed=False)
+        self.window_shape=RoundedRegion(self.window,self.scale,20);self.window_shape.resize()
+        # Review windows must be discoverable by standard desktop capture tools.
+        # Keep the exact production client area and DWM chrome.
+        if getattr(owner.args, 'review_instance', False):
+            extended = owner.win.get_long(self.hwnd, -20)
+            owner.win.set_long(self.hwnd, -20, (extended & ~(0x80 | 0x08000000)) | 0x40000)
         owner.win.own_overlay(self.hwnd,owner.target["hwnd"] if owner.display_mode=="composer" and owner.target else None)
         if owner.display_mode=="desktop":
             owner.win.set_floating(self.hwnd,True)
@@ -268,6 +441,17 @@ class SettingsPanel:
         self.window.lift()
         self.window.focus_force()  # User explicitly opened settings; draft focus is untouched otherwise.
         self.window.bind("<FocusOut>", self.focus_out)
+
+    def follow_anchor(self):
+        from overlay_geometry import Rect,panel_bounds
+        anchor=getattr(self.owner,'last_bounds',None)
+        if self.closed or not isinstance(anchor,Rect):return
+        area=self.owner.win.work_area(self.owner.target['hwnd'] if self.owner.target else self.hwnd)
+        if not isinstance(area,Rect):return
+        bounds=panel_bounds(area,anchor,self.px(ui.PANEL_WIDTH),self.px(ui.PANEL_HEIGHT),self.scale)
+        if bounds!=self.bounds:
+            self.bounds=bounds
+            self.window.geometry(f'{bounds.width}x{bounds.height}+{bounds.left}+{bounds.top}')
 
     def px(self, value):
         return round(value*self.scale)
@@ -277,8 +461,12 @@ class SettingsPanel:
                         bd=0, padx=0, pady=0, highlightthickness=0,
                         font=(family(), -self.px(size), "bold" if bold else "normal"), **kwargs)
 
-    def button(self, parent, text, command, quiet=False, color=ACCENT, font_size=13):
-        return VectorButton(parent,text,command,self.scale,quiet,color,font_size=font_size)
+    def button(self, parent, text, command, quiet=False, color=ACCENT, font_size=ui.ACTION_SIZE,dialog=False,kind=None,align='center',tab_stop=True):
+        kind=kind or ('secondary' if dialog and quiet else 'text' if quiet else 'primary')
+        return VectorButton(parent,text,command,self.scale,kind!='primary',MUTED if dialog and quiet else INK if kind=='secondary' else color,
+                            surface_bg=parent.cget('background'),font_size=font_size,variant=kind,text_anchor=align,tab_stop=tab_stop,
+                            height=34 if dialog or kind=='primary' else ui.TEXT_ACTION_HEIGHT if kind=='text' else ui.ACTION_HEIGHT,
+                            min_width=76 if dialog else ui.ACTION_MIN_WIDTH if kind in ('primary','secondary') else 0,outlined=kind=='secondary')
 
     def rule(self, parent, pad=0):
         tk.Frame(parent, bg=theme.color(LINE), height=1).pack(fill="x", padx=self.px(pad), pady=self.px(5))
@@ -329,6 +517,9 @@ class SettingsPanel:
             return "break"
 
     def show_tab(self, tab):
+        if self.quota_job:
+            self.window.after_cancel(self.quota_job)
+            self.quota_job = None
         if self.catalog_job:
             self.window.after_cancel(self.catalog_job)
             self.catalog_job = None
@@ -342,6 +533,10 @@ class SettingsPanel:
         self.tabs.select(tab)
         if tab == "strip":
             self.build_strip()
+        elif tab == "quota":
+            from quota_panel import QuotaPanel
+            self.quota_page = QuotaPanel(self)
+            self.quota_job = self.window.after(1000,self.quota_tick)
         elif tab == "display":
             self.build_display()
         elif tab == "session":
@@ -350,11 +545,17 @@ class SettingsPanel:
             self.build_help()
         self.apply_theme(theme.current())
 
+    def quota_tick(self):
+        self.quota_job = None
+        if not self.closed and self.tab == "quota":
+            self.refresh()
+            self.quota_job = self.window.after(1000,self.quota_tick)
+
     def switch(self, parent, variable, command):
         return Toggle(parent, variable, command, self.scale)
 
     def build_strip(self):
-        self.preview_caption = self.label(self.body, "预览 · 当前会话", 12, MUTED)
+        self.preview_caption = self.label(self.body, "预览 · 当前会话", 12, MUTED,wraplength=self.px(400),justify='left')
         self.preview_caption.pack(fill="x", pady=(0, self.px(5)))
         self.preview = tk.Canvas(self.body, bg=theme.color(BG), width=1,height=self.px(64),bd=0,highlightthickness=0)
         self.preview.pack(fill="x", pady=(0, self.px(9)))
@@ -362,16 +563,21 @@ class SettingsPanel:
         self.preview_key = None
         self.label(self.body, "显示指标", 12, MUTED).pack(fill="x", pady=(0, self.px(4)))
         self.metric_toggles = {}
-        for key, (title, description) in METRICS.items():
-            row = tk.Frame(self.body, bg=theme.color(BG))
-            row.pack(fill="x", pady=self.px(7))
+        grid = tk.Frame(self.body,bg=theme.color(BG));grid.pack(fill="x")
+        for index,(key, (title, description)) in enumerate(METRICS.items()):
+            if key not in self.owner.metric_choices:
+                self.owner.metric_choices[key]=tk.BooleanVar(master=self.owner.root,value=key in self.owner.visible_metrics)
+            row = tk.Frame(grid, bg=theme.color(BG))
+            row.grid(row=index//2,column=index%2,sticky="ew",padx=(0,self.px(18)) if index%2==0 else 0,pady=self.px(6))
             words = tk.Frame(row, bg=theme.color(BG))
             words.pack(side="left", fill="x", expand=True)
-            self.label(words, title, 15, bold=True).pack(fill="x")
-            self.label(words, description, 13, MUTED).pack(fill="x",pady=(self.px(3),0))
+            self.label(words, title, 14, bold=True).pack(fill="x")
             toggle = self.switch(row, self.owner.metric_choices[key], self.change_metrics)
             toggle.pack(side="right")
             self.metric_toggles[key] = toggle
+        for col in (0,1):grid.grid_columnconfigure(col,weight=1,uniform="metric")
+        from quota_panel import strip_controls
+        self.quota_strip_sync=strip_controls(self,self.body)
         self.rule(self.body)
         font_row = tk.Frame(self.body, bg=theme.color(BG))
         font_row.pack(fill="x", pady=self.px(3))
@@ -449,7 +655,7 @@ class SettingsPanel:
     def apply_theme(self, previous):
         theme.repaint(self,previous)
         self.logo=tk.PhotoImage(master=self.window,data=base64.b64encode(
-            render_asset("brand.svg",self.px(36),self.px(36),self.scale)))
+            render_asset("brand.svg",self.px(34),self.px(34),self.scale)))
         self.logo_label.configure(image=self.logo)
         self.preview_key=None
         self.refresh()
@@ -457,7 +663,7 @@ class SettingsPanel:
     def change_metrics(self):
         self.owner.select_metrics()
         selected = sum(bool(choice.get()) for choice in self.owner.metric_choices.values())
-        self.feedback.configure(text="至少保留一项指标" if selected == 1 else "设置已保存")
+        self.feedback.configure(text="未选择显示指标，仍可操作两侧按钮" if selected == 0 else "设置已保存")
         self.refresh()
 
     def change_font(self, size):
@@ -562,9 +768,12 @@ class SettingsPanel:
         term = self.search.get().casefold().strip()
         self.matches = [i for i in self.catalog if term in i["title"].casefold()]
         self.tree.delete(*self.tree.get_children())
+        self.session_rows = {}
+        self.marked_identity = self.owner.binding.identity
         for index,item in enumerate(self.matches):
             self.tree.insert("","end",iid=str(index),text="  "+item["title"],image=self.tree_icon,
                              values=("当前" if item["id"]==self.owner.binding.identity else "",))
+            self.session_rows[item["id"]] = str(index)
             if item["id"] == selected_id:
                 self.tree.selection_set(str(index))
         self.result_count.configure(text=f"{len(self.matches)} 项")
@@ -629,6 +838,9 @@ class SettingsPanel:
         if self.closed:
             return
         owner = self.owner
+        if self.tab == "quota":
+            self.quota_page.refresh()
+            return
         if self.tab == "session":
             binding=owner.binding
             self.binding_modes.select(binding.mode)
@@ -644,11 +856,20 @@ class SettingsPanel:
                     "not_found":("无记录","当前页面没有本地记录","切到有本地记录的工作会话，或从下方固定。"),
                     "unavailable":("暂不可用","暂时无法识别当前窗口","切回工作窗口后重试，也可以从下方固定。"),
                 }.get(binding.status,("待识别","等待识别当前工作会话","切回工作窗口后自动识别，也可以从下方固定。"))
+                reason=self.owner.context_policy().reason
+                if reason=="non_work_page":
+                    badge,title,description="非工作页","当前未在工作会话","回到工作会话后自动恢复；桌面胶囊仍可保留。"
+                elif reason=="no_composer":
+                    badge,title,description="等待输入框","当前页面没有可确认的输入框","跟随条已隐藏；识别到工作输入框后恢复。"
             self.session_title.configure(text=title)
             self.binding_status.configure(text=badge)
             self.binding_description.configure(text=description)
-            for index,item in enumerate(self.matches):
-                self.tree.item(str(index),values=("当前" if item["id"]==owner.binding.identity else "",))
+            if self.marked_identity != binding.identity:
+                for identity in (self.marked_identity, binding.identity):
+                    row = self.session_rows.get(identity)
+                    if row is not None:
+                        self.tree.item(row,values=("当前" if identity==binding.identity else "",))
+                self.marked_identity = binding.identity
             self.selection_state()
         if self.tab == "display":
             for mode,button in self.mode_buttons.items():
@@ -666,29 +887,54 @@ class SettingsPanel:
             return
         if self.tab != "strip":
             return
-        snapshot = {**(owner.snapshot or {}), "visible_metrics": owner.visible_metrics}
+        if getattr(self,'quota_strip_sync',None):self.quota_strip_sync()
+        snapshot = {**(owner.snapshot or {}), "visible_metrics": owner.visible_metrics,
+                    "quota_display":owner.quota_display() if hasattr(owner,"quota_display") else {}}
         width=max(1,self.content.winfo_width())
         key = (owner.font_size,width,theme.current(),tuple(style.metrics(snapshot).values()))
         if width>self.px(100) and key != self.preview_key:
             # Render at the actual selected size. A narrow preview uses the same
             # priority rules as the real strip instead of shrinking every glyph.
-            png, _ = owner.render_strip(snapshot, width, self.scale*owner.font_size/15)
+            png, self.preview_layout = owner.render_strip(snapshot, width, self.scale*owner.font_size/15)
             self.preview_image = tk.PhotoImage(master=self.window, data=base64.b64encode(png).decode("ascii"))
             self.preview.configure(height=self.preview_image.height())
             self.preview.itemconfigure(self.preview_item,image=self.preview_image)
             self.preview_key = key
         note = "刷新中" if snapshot.get("from_cache") else "当前会话" if snapshot.get("available") else "暂无会话数据"
-        self.preview_caption.configure(text="预览 · "+note)
+        shown={cell['key'] for cell in getattr(self,'preview_layout',[])}
+        hidden=[style.LABELS[k] for k in owner.visible_metrics if k not in shown]
+        self.preview_caption.configure(text="预览 · "+note+f' · 已选 {len(owner.visible_metrics)} 项，显示 {len(shown)} 项'+
+                                       ('\n当前宽度收起：'+'、'.join(hidden) if hidden else ''))
         self.font_segments.select(owner.font_size)
 
     def focus_out(self, _):
+        # Keep the isolated acceptance window available while the user reads
+        # the review in Codex; ordinary launch focus behavior stays unchanged.
+        if getattr(self.owner.args,'review_instance',False):return
         if not self.closed and not getattr(self,"modal_open",False):
             if self.focus_check:
                 self.window.after_cancel(self.focus_check)
             self.focus_check = self.window.after(100, self.close_if_outside)
 
+    def cancel_metric_drag(self):
+        sorter = getattr(self, "metric_sorter", None)
+        if sorter is not None and sorter.active is not None:
+            sorter.cancel()
+            return True
+        return False
+
+    def escape(self, event=None):
+        if not self.cancel_metric_drag():
+            self.close()
+        return "break"
+
     def close_if_outside(self):
         self.focus_check = None
+        if not self.closed and getattr(self.owner,'drag',None):
+            # Dragging our own strip is still an interaction with this panel.
+            # Reconsider dismissal only after the drag has completed.
+            self.focus_check=self.window.after(100,self.close_if_outside)
+            return
         if not self.closed and not getattr(self,"modal_open",False) and self.window.focus_displayof() is None:
             self.close()
 
@@ -697,6 +943,12 @@ class SettingsPanel:
             return
         self.closed = True
         owner = self.owner
+        for dialog in tuple(getattr(self,'dialogs',())):
+            if dialog.winfo_exists():dialog.pulse_close()
+        if getattr(self,'quota_page',None) and hasattr(self.quota_page,'close'):self.quota_page.close()
+        if self.quota_job:
+            self.window.after_cancel(self.quota_job)
+            self.quota_job = None
         if self.catalog_job:
             self.window.after_cancel(self.catalog_job)
             self.catalog_job = None
@@ -714,3 +966,10 @@ class SettingsPanel:
         owner.refresh_input_mode(bool(owner.target and owner.win.active_target(owner.target["hwnd"])))
         if not owner.stop.is_set():
             owner.root.after_idle(owner.refresh_surface)
+
+# The v19 layout reuses the native chrome, lifecycle and theme implementation.
+from product_panel import install as install_product_panel
+install_product_panel(SettingsPanel)
+
+from panel_runtime import install as install_retained_pages
+install_retained_pages(SettingsPanel)

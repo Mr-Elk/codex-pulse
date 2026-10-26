@@ -93,6 +93,10 @@ class YieldTests(unittest.TestCase):
         window.menu_open = False
         window.drag = None
         window.font_size = 15
+        from quota_service import clean_config, METRIC_KEYS
+        window.quota_preferences=clean_config(None);window.quota_snapshot={};window.quota_service=None
+        window.metric_order=list(METRIC_KEYS);window.strip_visible=True
+        window.away_expanded=False;window.compact=False
         window.scale = 1
         window.manual = None
         window.draw = Mock()
@@ -127,7 +131,7 @@ class YieldTests(unittest.TestCase):
         self.assertTrue(window.visible)
         window.win.show_without_focus.assert_not_called()
 
-    def test_unknown_probe_keeps_last_stable_geometry(self):
+    def test_one_unknown_probe_briefly_keeps_verified_geometry_and_data(self):
         window = self.window()
         window.tick()
         rect = window.last_bounds
@@ -135,8 +139,8 @@ class YieldTests(unittest.TestCase):
         window.tick()
         self.assertTrue(window.visible)
         self.assertEqual(window.last_bounds,rect)
-        self.assertIsNone(window.binding.identity)
-        self.assertIsNone(window.snapshot)
+        self.assertEqual(window.binding.identity,"a")
+        self.assertEqual(window.snapshot["usage"]["total_tokens"],123)
         window.win.hide.assert_not_called()
 
     def test_leaving_app_clears_binding_and_hides_the_attached_shell(self):
@@ -147,7 +151,7 @@ class YieldTests(unittest.TestCase):
         self.assertIsNone(window.binding.identity)
         self.assertIsNone(window.snapshot)
         self.assertFalse(window.visible)
-        self.assertEqual(window.hidden_reason,"inactive")
+        self.assertEqual(window.hidden_reason,"host_inactive")
 
     def test_own_settings_and_drag_keep_the_shell_visible(self):
         window = self.window()
