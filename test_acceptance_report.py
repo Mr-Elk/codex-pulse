@@ -6,7 +6,7 @@ import acceptance_report as report
 
 class AcceptanceReportTests(unittest.TestCase):
     def target(self,root):
-        (root/'data').mkdir();(root/'installation.json').write_text(json.dumps({'name':'codex-pulse-beta','current':'0.7.0-beta.10','previous':'0.7.0-beta.6','python':'private-python-path'}))
+        (root/'data').mkdir();(root/'installation.json').write_text(json.dumps({'name':'codex-pulse-beta','current':'0.7.0-beta.7','previous':'0.7.0-beta.6','python':'private-python-path'}))
         (root/'data/settings.json').write_text(json.dumps({'binding':'private-account-id','title':'private-chat-title'}))
         return root
 

@@ -4,7 +4,7 @@ import ctypes as C
 from overlay_style import Run, metrics, INSET
 from dataclasses import replace
 from quota_model import selected_window
-from quota_service import clean_config
+from quota_config import clean_config
 from product_data import PRESETS
 from functools import lru_cache
 import theme

@@ -1,5 +1,5 @@
 from pathlib import Path
-import subprocess,unittest,json
+import subprocess,unittest,json,tempfile
 
 class ComposerWrapperTests(unittest.TestCase):
     def test_actual_powershell_predicate_prefers_visible_shell_over_scrolled_text_extent(self):
@@ -25,8 +25,18 @@ $results|ConvertTo-Json -Compress
 '''
         # Extract only the pure predicate AST. No UIA assembly, window lookup,
         # content read, screenshot or input is executed by this test.
-        result=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command','& { '+script+' }',str(Path(__file__).with_name('composer_anchor.ps1'))],capture_output=True,text=True,encoding='utf-8',timeout=15,creationflags=subprocess.CREATE_NO_WINDOW)
-        self.assertEqual(result.returncode,0,result.stderr)
+        with tempfile.TemporaryDirectory(prefix='pulse predicate ') as directory:
+            folder=Path(directory)
+            runner=folder/'predicate runner.ps1'
+            source=folder/'composer source.ps1'
+            runner.write_text(script,encoding='utf-8-sig')
+            source.write_bytes(Path(__file__).with_name('composer_anchor.ps1').read_bytes())
+            # -File preserves argument boundaries for paths containing spaces.
+            # Keep output as bytes so localized failure text cannot crash a reader.
+            result=subprocess.run(
+                ['powershell.exe','-NoProfile','-NonInteractive','-File',str(runner),str(source)],
+                capture_output=True,timeout=15,creationflags=subprocess.CREATE_NO_WINDOW)
+        self.assertEqual(result.returncode,0,result.stderr.decode('mbcs',errors='replace'))
         self.assertEqual(json.loads(result.stdout),[True,True,False,False,False])
 
 if __name__=='__main__':unittest.main()

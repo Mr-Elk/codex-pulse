@@ -1,5 +1,7 @@
 # Codex Pulse
 
+Source `main` includes the beta.11 locator memory fix. The public download remains beta.10; beta.11 is a local internal candidate. See [candidate validation](CANDIDATE_VALIDATION.md) for completed checks and remaining limits.
+
 [简体中文](README.md) | English
 
 A local usage strip for Codex on Windows. See token totals, estimated average TPS, cache hit rate, estimated context usage, and turn/request counts for your current conversation.

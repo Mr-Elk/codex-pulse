@@ -10,7 +10,7 @@ from product_panel import box,text,hours_select,hours_choices
 from product_controls import Select,info,OutlineButton
 from product_data import recent_info,freshness,moment,age
 from quota_model import selected_group,selected_window,clock_text,countdown,quota_percent,used_percent,balance_text
-from quota_service import clean_config
+from quota_config import clean_config
 BG,INK,MUTED,ACCENT='#ffffff','#233955','#607088','#7865d6'
 
 class QuotaPanel:

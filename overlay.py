@@ -29,7 +29,8 @@ from pulse import Monitor
 from context_probe import PersistentProbe, parse_context
 from snapshot_cache import SnapshotCache
 from runtime_state import RuntimeSession, atomic_json
-from quota_service import QuotaService,load_config,clean_config,reminder_rule
+from quota_service import QuotaService
+from quota_config import load_config,clean_config,reminder_rule
 from quota_model import strip_values,selected_window
 
 BASE = Path(__file__).resolve().parent

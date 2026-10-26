@@ -1,6 +1,6 @@
-param([string]$InstallRoot = (Join-Path $env:LOCALAPPDATA 'CodexPulseBeta'))
+﻿param([string]$InstallRoot = (Join-Path $env:LOCALAPPDATA 'CodexPulseBeta'))
 $ErrorActionPreference = 'Stop'
-$pulsePayload = Join-Path $PSScriptRoot 'codex-pulse-0.7.0-beta.10-payload.zip'
+$pulsePayload = Join-Path $PSScriptRoot 'codex-pulse-0.7.0-beta.11-payload.zip'
 $pulseRecovery = Join-Path $PSScriptRoot 'recovery\codex-pulse-0.7.0-beta.6-payload.zip'
 if (!(Test-Path -LiteralPath $pulsePayload) -or !(Test-Path -LiteralPath $pulseRecovery)) {
     Write-Error '安装包不完整：请先解压整个文件夹，保留 recovery 和 tools。现有安装未改变。'

@@ -1,0 +1,146 @@
+{
+  "version": "0.7.0-beta.11",
+  "scope": "Windows local internal candidate; not published",
+  "tests": {
+    "run": 338,
+    "seconds": 180.392,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "long_run": {
+    "elapsed_seconds": 3601.4770995999997,
+    "samples": 320,
+    "visible_seconds": {
+      "composer": 1122.5150000001304,
+      "desktop": 1654.8910000000033
+    },
+    "collector_gaps": [
+      {
+        "from_seconds": 188.34400000004098,
+        "to_seconds": 339.783704996109,
+        "reason": "Collector read sharing failure; product remained running, interval not counted as coverage"
+      }
+    ],
+    "group_private_resident_MiB": {
+      "first": 145.82421875,
+      "last": 143.30078125,
+      "min": 139.6015625,
+      "max": 186.828125
+    },
+    "resources_by_role": {
+      "overlay_main": {
+        "private_resident_MiB": {
+          "first": 58.8671875,
+          "last": 62.453125,
+          "min": 58.8046875,
+          "max": 80.9609375
+        },
+        "private_commit_MiB": {
+          "first": 62.51953125,
+          "last": 84.3125,
+          "min": 62.0078125,
+          "max": 84.3125
+        }
+      },
+      "quota_cli_backend": {
+        "private_resident_MiB": {
+          "first": 22.0078125,
+          "last": 21.68359375,
+          "min": 19.1171875,
+          "max": 23.578125
+        },
+        "private_commit_MiB": {
+          "first": 30.40625,
+          "last": 30.4375,
+          "min": 26.35546875,
+          "max": 31.78125
+        }
+      },
+      "child_helper": {
+        "private_resident_MiB": {
+          "first": 0.84765625,
+          "last": 0.81640625,
+          "min": 0.66796875,
+          "max": 0.87890625
+        },
+        "private_commit_MiB": {
+          "first": 1.25,
+          "last": 1.1875,
+          "min": 1.171875,
+          "max": 1.28125
+        }
+      },
+      "composer_probe": {
+        "private_resident_MiB": {
+          "first": 51.35546875,
+          "last": 48.31640625,
+          "min": 32.765625,
+          "max": 74.97265625
+        },
+        "private_commit_MiB": {
+          "first": 88.65234375,
+          "last": 85.64453125,
+          "min": 70.84765625,
+          "max": 112.890625
+        }
+      },
+      "launcher": {
+        "private_resident_MiB": {
+          "first": 11.93359375,
+          "last": 9.36328125,
+          "min": 9.36328125,
+          "max": 11.93359375
+        },
+        "private_commit_MiB": {
+          "first": 13.69921875,
+          "last": 13.66796875,
+          "min": 13.66796875,
+          "max": 13.69921875
+        }
+      }
+    },
+    "observed_helper_processes": 13,
+    "unaccounted_owned_survivors": 0
+  },
+  "native_review": {
+    "result": "passed_with_observation_limits",
+    "composer_cold_start_cached_data_retained": true,
+    "desktop_before_boundary_after_sampled": true,
+    "same_main_recovered_after_user_return": true,
+    "limitations": [
+      "Sampled real screenshots are not continuous video and cannot prove every unsampled frame.",
+      "The 151-second diagnostic reader gap is retained and excluded from visible coverage."
+    ],
+    "no_composer_period": "Actual page contents were not independently confirmed during hiding; later confirmed work context recovered in the same main process without restart."
+  },
+  "installation": {
+    "actual_installer": true,
+    "fresh_install": true,
+    "running_beta10_upgrade": true,
+    "rollback_beta6_native": true,
+    "reupgrade_beta11_native": true,
+    "owned_process_cleanup": true
+  },
+  "settings": {
+    "installer_boundary_bytes_preserved": true,
+    "all_runtime_preference_values_preserved": true,
+    "startup_JSON_whitespace_rewrite": "normal application serialization; original evidence retained",
+    "final_original_personal_preferences_restored": true
+  },
+  "history": {
+    "original_rows_preserved": true,
+    "sqlite_quick_check": "ok"
+  },
+  "runtime_files_identical_to_tested_freeze": 108,
+  "payload_sha256": "b58d23794e0fc20290f8f71b694acc5c085addef6dd8bdecab4a290e0cbffad9",
+  "installer_sha256": "6f13ecbd8aedd10fb90fc19fc5177747030491d9aa6e42b18c28740efedd704b",
+  "remaining": [
+    "Overnight operation",
+    "Sleep/wake",
+    "Second physical Windows computer",
+    "Multi-display",
+    "Mac native implementation"
+  ],
+  "published": false
+}

@@ -10,7 +10,8 @@ import time
 import uuid
 
 from quota_model import strip_values,recent_for_selection
-from quota_service import QuotaService,clean_config,load_config
+from quota_service import QuotaService
+from quota_config import clean_config,load_config
 from quota_source import CodexQuotaSource
 
 

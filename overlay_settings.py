@@ -5,6 +5,7 @@ import os
 import sys
 from pathlib import Path
 from overlay_style import normalize_keys, ORDER
+from quota_config import METRIC_KEYS
 import theme
 
 FONT_SIZES = (13, 15, 17)
@@ -66,7 +67,7 @@ def load(path, legacy=None):
 
 def load_display(path):
     result = {"mode":"composer", "position":None, "compact":True, "animations":True,
-              "expanded_mode":"composer", "visible":True, "metric_order":list(__import__("quota_service").METRIC_KEYS)}
+              "expanded_mode":"composer", "visible":True, "metric_order":list(METRIC_KEYS)}
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
         value = document.get("display", {})
@@ -78,7 +79,6 @@ def load_display(path):
                 if type(value.get(key)) is bool:
                     result[key] = value[key]
             if value.get("presentation_schema")!=19 and result["mode"]=="composer":result["compact"]=False
-            from quota_service import METRIC_KEYS
             order = value.get("metric_order")
             if not isinstance(order, (list, tuple)):
                 order = document.get("visible_metrics", []) if value.get("presentation_schema") != 19 else []

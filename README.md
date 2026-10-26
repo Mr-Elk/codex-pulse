@@ -1,5 +1,7 @@
 # Codex Pulse
 
+当前 `main` 源码包含 beta.11 定位辅助内存修复。公开下载仍为 beta.10，beta.11 仅为本地内测候选；已完成检查与待验项目见[候选验证说明](CANDIDATE_VALIDATION.md)。
+
 简体中文 | [English](README.en.md)
 
 Windows 上的本地 Codex 会话统计条。查看 Token 用量、平均 TPS 估算、缓存命中率、上下文占用及轮次/请求数。

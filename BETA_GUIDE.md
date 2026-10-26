@@ -1,6 +1,6 @@
 # Codex Pulse Windows 测试版使用指南
 
-版本：0.7.0-beta.10。Windows公开测试版。
+版本：0.7.0-beta.11。Windows 本地内测候选，未公开发布。
 
 ## 环境与安装
 
@@ -19,7 +19,7 @@
 
 本包附带SHA256固定的0.7.0-beta.6作为回退基线。新安装和从旧版升级都预备这条回退路径，不再默认回到存在Esc误退出缺陷的0.7.0-beta.5。旧版文件仍保留，没有删除。
 
-双击“回退上一版.cmd”，再运行启动入口。首次安装也可回到包内预备的beta.6。回退预检可运行 `python controller/manage.py rollback --target "." --dry-run`。回退保留当前设置；重新运行本包安装器可回到beta.7。
+双击“回退上一版.cmd”，再运行启动入口。首次安装也可回到包内预备的beta.6。回退预检可运行 `python controller/manage.py rollback --target "." --dry-run`。回退保留当前设置；重新运行本包安装器可回到beta.11。
 
 旧的插件缓存/源码启动方式与独立Windows安装目录不是同一种安装结构。请不要直接把缓存目录当作InstallRoot；原路径与数据保持，迁移或并行验收应使用独立目录。实际公开Windows旧包升级演练结果见CANDIDATE_VALIDATION.md。
 
