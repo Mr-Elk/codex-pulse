@@ -4,15 +4,17 @@
 
 A local usage strip for Codex on Windows. See token totals, estimated average TPS, cache hit rate, estimated context usage, and turn/request counts for your current conversation.
 
-**Current version: 0.6.18-beta.5 · Pre-release.** Primarily tested on Windows 11 x64. Requires Python 3.10+ with Tkinter and Windows PowerShell. No API key or third-party Python packages are required at runtime.
+**Windows prerelease: 0.7.0-beta.10.** Primarily tested on Windows 11 x64. Requires Python 3.10+ with Tkinter and Windows PowerShell. No API key or third-party Python packages are required at runtime.
 
 The application UI is currently in Chinese. UI language switching is planned; this English README covers setup, controls, metrics, and limitations.
 
-![Example usage strip](https://github.com/Mr-Elk/codex-pulse/releases/download/v0.6.18-beta.5/toolbar.png)
+![Example usage strip](https://github.com/Mr-Elk/codex-pulse/releases/download/v0.7.0-beta.10/toolbar.png)
+
+This candidate is local only and has not been uploaded to Releases. Use the supplied local Windows ZIP.
 
 ## Download and run
 
-1. Download `codex-pulse-0.6.18-beta.5-windows.zip` from [Releases](https://github.com/Mr-Elk/codex-pulse/releases).
+1. Download `codex-pulse-0.7.0-beta.10-windows.zip` from the [release page](https://github.com/Mr-Elk/codex-pulse/releases/tag/v0.7.0-beta.10).
 2. Extract the entire ZIP into a regular folder. Double-click **安装内测版.cmd** (Install beta).
 3. Open `%LOCALAPPDATA%/CodexPulseBeta` and double-click **启动统计条.cmd** (Start usage strip).
 4. Open a local Codex work conversation. If automatic identification is unavailable, use the ellipsis → **会话** (Sessions) to choose and pin a conversation.
@@ -34,7 +36,7 @@ The installer does not enable login startup or change system execution policy. C
 
 Open settings with the right ellipsis or a right-click. **统计条** (Strip) controls metrics and text size; **显示** (Display) controls presentation and color; **会话** (Sessions) selects automatic or pinned tracking. Escape or the top-right × closes settings. **关闭统计条** at the bottom exits the entire companion.
 
-![Display settings example](https://github.com/Mr-Elk/codex-pulse/releases/download/v0.6.18-beta.5/settings-display.png)
+![Display settings example](https://github.com/Mr-Elk/codex-pulse/releases/download/v0.7.0-beta.10/settings-display.png)
 
 ## Metrics and supported data
 
@@ -96,3 +98,19 @@ These are independent projects. Their metric definitions and integration methods
 Use [Issues](https://github.com/Mr-Elk/codex-pulse/issues) with the version, Windows scaling, presentation mode, and reproduction steps. Logs stay local. Remove private paths, conversation titles, UUIDs, and message content before sharing.
 
 Licensed under [MIT](LICENSE).
+
+## Local 0.7.0 quota preview
+
+The new **额度** (Quota) tab shows account groups, remaining allowance for each actual window, official reset timestamps, countdowns, and reset-credit status/expiry. It uses a logged-in official Codex CLI with `account/rateLimits/read` support. Pulse does not read authentication files, request model turns, or redeem reset credits. Account reads contact the official service; this feature is not entirely offline.
+
+Recent usage offers 1/3/6/24 hours and a custom integer range of 1–168 hours. It accumulates local snapshots after activation, estimates percentage points of the selected complete allowance window, and reports recorded coverage and gaps. It cannot reconstruct earlier history or convert tokens into quota. Fourteen days of account-hashed snapshots are stored alongside personal settings; clearing them requires local confirmation.
+
+Strip filters include recent usage, remaining allowance, natural reset, reset credits and the five existing conversation metrics. Choose the allowance window, recent range and capsule summary; narrow layouts fold whole fields. Optional local popup reminders support a selected window and 0–100% threshold. They establish a baseline before alerting and deduplicate each cycle/threshold. Reset credits are read-only in this version.
+
+The portable quota engine and stdio bridge are prepared for macOS. A native Mac shell and Apple Silicon installer still require implementation and Mac mini testing; see [MACOS.md](MACOS.md). This preview has not been published to GitHub.
+
+## v19 local Windows review
+
+The local build uses Statistics, Account, and Display pages. Choose a session through Statistics → Source and scope and confirm it before binding. The logo expands or collapses within the selected display mode; values only show hover details. Font, icon, and strip height scale together. See [implementation and validation](V19_IMPLEMENTATION.md) and the separate [macOS plan](MACOS.md). This work is not a public release.
+
+The candidate includes a pinned beta.6 recovery baseline. Synthetic screenshots show the current UI. Other-machine acceptance instructions are in the Windows bundle acceptance directory. It is not published yet.
