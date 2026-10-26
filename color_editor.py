@@ -4,7 +4,7 @@ import colorsys
 import re
 import tkinter as tk
 
-from font_policy import family
+from font_policy import widget_family as family
 from panel_widgets import Surface, BG, MUTED
 import theme
 
@@ -120,13 +120,13 @@ class ColorEditor(tk.Frame):
         for event in ("<Button-1>","<Return>","<space>"):
             self.swatch.bind(event,lambda _:self.toggle_picker())
         self.apply_button=button(row,"应用",self.apply);self.apply_button.pack(side="left")
-        self.status=tk.Label(self,text="",font=(family(),-round(11*scale)),bg=theme.color(fill),fg=theme.color(MUTED),bd=0,anchor="w")
+        self.status=tk.Label(self,text="",font=(family(),-round(12*scale)),bg=theme.color(fill),fg=theme.color(MUTED),bd=0,anchor="w")
         self.status.pack(fill="x",pady=(round(7*scale),0))
         self.picker=Surface(self,scale,fill=BG,padx=8,pady=8)
         self.plane=ColorField(self.picker.inner,self,"sv",126);self.plane.pack(fill="x")
         self.hue=ColorField(self.picker.inner,self,"hue",24);self.hue.pack(fill="x",pady=(round(4*scale),0))
         actions=tk.Frame(self.picker.inner,bg=BG);actions.pack(fill="x")
-        tk.Label(actions,text="拖动选色，点击应用后保存",font=(family(),-round(11*scale)),bg=BG,fg=theme.color(MUTED),bd=0).pack(side="left")
+        tk.Label(actions,text="拖动选色，点击应用后保存",font=(family(),-round(12*scale)),bg=BG,fg=theme.color(MUTED),bd=0).pack(side="left")
         button(actions,"取消",self.cancel,quiet=True).pack(side="right")
         self.trace=self.value.trace_add("write",self.edited)
         self.bind("<Destroy>",self.dispose)

@@ -2,6 +2,7 @@
 import json
 import math
 import os
+import sys
 from pathlib import Path
 from overlay_style import normalize_keys, ORDER
 import theme
@@ -20,6 +21,7 @@ def default_path():
             return recorded.resolve()
     except (OSError, ValueError, TypeError):
         pass
+    if sys.platform=="darwin":return Path.home()/"Library/Application Support/CodexPulse/settings.json"
     folder = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
     return (folder / "CodexPulse" / "settings.json").resolve()
 
@@ -32,7 +34,11 @@ def valid_position(value):
     if (type(center) in (int, float) and type(gap) in (int, float)
             and math.isfinite(center) and math.isfinite(gap)
             and 0 <= center <= 1 and 0 <= gap <= 4000):
-        return {"anchor":"composer","center_ratio":center,"gap":gap} if anchored else {"center_ratio": center, "bottom_gap": gap}
+        result={"anchor":"composer","center_ratio":center,"gap":gap} if anchored else {"center_ratio": center, "bottom_gap": gap}
+        for key in ('capsule_left_ratio','left_ratio'):
+            ratio=value.get(key)
+            if anchored and type(ratio) in (int,float) and math.isfinite(ratio) and 0<=ratio<=1:result[key]=ratio
+        return result
     return None
 
 
@@ -60,22 +66,31 @@ def load(path, legacy=None):
 
 def load_display(path):
     result = {"mode":"composer", "position":None, "compact":True, "animations":True,
-              "expanded_mode":"composer"}
+              "expanded_mode":"composer", "visible":True, "metric_order":list(__import__("quota_service").METRIC_KEYS)}
     try:
-        value = json.loads(path.read_text(encoding="utf-8")).get("display", {})
+        document = json.loads(path.read_text(encoding="utf-8"))
+        value = document.get("display", {})
         if isinstance(value, dict):
             result["mode"] = value.get("mode") if value.get("mode") in ("composer","desktop") else "composer"
             result["expanded_mode"] = value.get("expanded_mode") if value.get("expanded_mode") in ("composer","desktop") else result["mode"]
             result["position"] = valid_position(value.get("position"))
-            for key in ("compact","animations"):
+            for key in ("compact","animations","visible"):
                 if type(value.get(key)) is bool:
                     result[key] = value[key]
+            if value.get("presentation_schema")!=19 and result["mode"]=="composer":result["compact"]=False
+            from quota_service import METRIC_KEYS
+            order = value.get("metric_order")
+            if not isinstance(order, (list, tuple)):
+                order = document.get("visible_metrics", []) if value.get("presentation_schema") != 19 else []
+            if not isinstance(order, (list, tuple)):
+                order = []
+            result["metric_order"]=list(dict.fromkeys([k for k in order if k in METRIC_KEYS]+list(METRIC_KEYS)))
     except (OSError,ValueError,AttributeError):
         pass
     return result
 
 
-def save(path, font_size, position, locked=True, visible_metrics=None, display=None, theme_color=None):
+def save(path, font_size, position, locked=True, visible_metrics=None, display=None, theme_color=None, quota=None):
     path.parent.mkdir(parents=True, exist_ok=True)
     value = {}
     old_bytes = None
@@ -99,6 +114,7 @@ def save(path, font_size, position, locked=True, visible_metrics=None, display=N
         value["display"] = display
     if theme_color is not None:
         value["theme_color"] = theme.normalize(theme_color)
+    if quota is not None:value["quota"]=quota
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
     temporary.replace(path)

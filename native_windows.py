@@ -7,6 +7,16 @@ user32 = C.WinDLL("user32", use_last_error=True)
 kernel32 = C.WinDLL("kernel32", use_last_error=True)
 CALLBACK = C.WINFUNCTYPE(W.BOOL, W.HWND, W.LPARAM)
 
+
+class MonitorInfo(C.Structure):
+    _fields_ = [("size", W.DWORD), ("monitor", W.RECT), ("work", W.RECT), ("flags", W.DWORD)]
+
+
+user32.MonitorFromWindow.argtypes = [W.HWND, W.DWORD]
+user32.MonitorFromWindow.restype = W.HANDLE
+user32.GetMonitorInfoW.argtypes = [W.HANDLE, C.POINTER(MonitorInfo)]
+user32.GetMonitorInfoW.restype = W.BOOL
+
 user32.EnumWindows.argtypes = [CALLBACK, W.LPARAM]
 user32.EnumWindows.restype = W.BOOL
 user32.GetWindowRect.argtypes = [W.HWND, C.POINTER(W.RECT)]
@@ -147,12 +157,6 @@ def set_floating(hwnd, enabled):
 def work_area(hwnd):
     """Place settings on the target monitor, including monitors left of primary."""
     from overlay_geometry import Rect
-    class MonitorInfo(C.Structure):
-        _fields_ = [("size", W.DWORD), ("monitor", W.RECT), ("work", W.RECT), ("flags", W.DWORD)]
-    user32.MonitorFromWindow.argtypes = [W.HWND, W.DWORD]
-    user32.MonitorFromWindow.restype = W.HANDLE
-    user32.GetMonitorInfoW.argtypes = [W.HANDLE, C.POINTER(MonitorInfo)]
-    user32.GetMonitorInfoW.restype = W.BOOL
     info = MonitorInfo(size=C.sizeof(MonitorInfo))
     monitor = user32.MonitorFromWindow(hwnd, 2)
     if monitor and user32.GetMonitorInfoW(monitor, C.byref(info)):

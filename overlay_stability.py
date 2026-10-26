@@ -16,8 +16,10 @@ class Motion:
         eased = 1-(1-t)**3
         left = round(self.start.left+(self.target.left-self.start.left)*eased)
         top = round(self.start.top+(self.target.top-self.start.top)*eased)
-        width=round(self.start.width+(self.target.width-self.start.width)*eased)
-        height=round(self.start.height+(self.target.height-self.start.height)*eased)
+        # A new presentation must render at its final size from the first
+        # frame. Intermediate widths can fold every reading out of the strip.
+        # Smooth movement and opacity remain independent of content layout.
+        width,height=self.target.width,self.target.height
         rect = Rect(left,top,left+max(1,width),top+max(1,height))
         return rect, round(self.start_alpha+(self.target_alpha-self.start_alpha)*eased), t >= 1
 
