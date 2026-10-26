@@ -22,7 +22,7 @@ FIELDS = ("input_tokens", "cached_input_tokens", "output_tokens", "reasoning_out
 def timestamp(value):
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
-    except (ValueError, TypeError, AttributeError):
+    except (ValueError, TypeError, AttributeError, OverflowError, OSError):
         return None
 
 
@@ -76,6 +76,8 @@ class Monitor:
         self.legacy_total = None
         self.starts = []
         self.last_log_id = 0
+        self.log_identity = None
+        self.start_keys = set()
         self.log_issue = False
         self.last_record_at = None
         self.metrics_issue = False
@@ -99,13 +101,18 @@ class Monitor:
                 raise ValueError("Session file does not match the selected thread.")
         elif kind in ("task_started", "turn_started"):
             turn_id = payload.get("turn_id")
+            if turn_id is not None and not isinstance(turn_id, str):
+                self.metrics_issue = True
+                return
             if turn_id:
                 self.current_turn = turn_id
                 self.turns.setdefault(turn_id, {"start": timestamp(payload.get("started_at")) or at, "end": None})
-            if payload.get("model_context_window"):
-                self.context_window = payload["model_context_window"]
+            self.read_context_window(payload)
         elif kind in ("task_complete", "turn_complete", "turn_aborted", "task_aborted"):
             turn_id = payload.get("turn_id") or self.current_turn
+            if turn_id is not None and not isinstance(turn_id, str):
+                self.metrics_issue = True
+                return
             if turn_id in self.turns:
                 self.turns[turn_id]["end"] = at
         elif kind == "turn_context":
@@ -114,6 +121,10 @@ class Monitor:
             if payload.get("thread_id") != self.thread_id or at is None:
                 return
             key = payload.get("response_id")
+            turn_id = payload.get("turn_id")
+            if not isinstance(key, str) or (turn_id is not None and not isinstance(turn_id, str)):
+                self.metrics_issue = True
+                return
             current = usage(payload.get("usage"))
             total = usage(payload.get("thread_token_usage"))
             if not key or key in self.seen:
@@ -125,15 +136,29 @@ class Monitor:
             self.records.append({"time": at, "turn_id": payload.get("turn_id"), "usage": current})
             self.total, self.last_usage, self.last_record_at = total, current, at
         elif kind == "token_count":
-            info = payload.get("info") or {}
-            if info.get("model_context_window"):
-                self.context_window = info["model_context_window"]
+            info = payload.get("info")
+            if info is None:
+                return
+            if not isinstance(info, dict):
+                self.metrics_issue = True
+                return
+            self.read_context_window(info)
             total, current = usage(info.get("total_token_usage")), usage(info.get("last_token_usage"))
             if total and current and at and total != self.legacy_total:
                 self.legacy.append({"time": at, "turn_id": self.current_turn, "usage": current})
                 self.legacy_total = total
                 if not self.records:
                     self.total, self.last_usage, self.last_record_at = total, current, at
+
+    def read_context_window(self, payload):
+        value = payload.get("model_context_window")
+        if value is None:
+            return
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            self.context_window = value
+        else:
+            self.context_window = None
+            self.metrics_issue = True
 
     def read_session(self):
         self.locate()
@@ -164,19 +189,30 @@ class Monitor:
     def read_starts(self):
         path = self.home / "logs_2.sqlite"
         try:
+            stat = path.stat()
+            identity = (stat.st_dev, stat.st_ino)
+            cursor = self.last_log_id if identity == self.log_identity else 0
             with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=0.15)) as conn:
                 conn.execute("PRAGMA query_only=ON")
+                maximum = conn.execute("SELECT MAX(id) FROM logs").fetchone()[0]
+                if maximum is not None and maximum < cursor:
+                    cursor = 0  # Table reset can preserve the database inode.
                 rows = conn.execute(
                     "SELECT id, ts, ts_nanos, feedback_log_body FROM logs "
                     "WHERE id > ? AND thread_id = ? AND target = 'feedback_tags' "
                     "AND feedback_log_body LIKE '%stream_request{%' ORDER BY id",
-                    (self.last_log_id, self.thread_id)).fetchall()
+                    (cursor, self.thread_id)).fetchall()
+            self.last_log_id, self.log_identity = cursor, identity
             for log_id, seconds, nanos, body in rows:
                 self.last_log_id = log_id
                 if "websocket.warmup=true" in body:
                     continue
                 match = re.search(r'\bturn_id="?([a-zA-Z0-9-]+)', body)
-                self.starts.append({"time": seconds + nanos / 1e9, "turn_id": match.group(1) if match else None})
+                turn_id = match.group(1) if match else None
+                key = (log_id, seconds, nanos, turn_id)
+                if key not in self.start_keys:
+                    self.start_keys.add(key)
+                    self.starts.append({"time": seconds + nanos / 1e9, "turn_id": turn_id})
             self.log_issue = False
         except (sqlite3.Error, OSError, ValueError):
             self.log_issue = True

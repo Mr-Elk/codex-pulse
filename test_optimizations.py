@@ -134,15 +134,15 @@ class SelectionAndSettingsTests(unittest.TestCase):
                 self.assertEqual(tuple(c.key for c in style.columns(width, selected=selected)), selected)
                 self.assertEqual(style.columns(10, selected=selected), [])
 
-    def test_cannot_hide_the_last_metric_from_the_menu(self):
+    def test_explicit_empty_selection_is_saved_as_the_approved_design_requires(self):
         window = layering_tests.YieldTests().window()
         window.visible_metrics = ("tokens",)
         window.metric_choices = {key: Mock(get=Mock(return_value=False)) for key in style.ORDER}
         window.save_preferences = Mock()
         window.select_metrics()
-        self.assertEqual(window.visible_metrics, ("tokens",))
-        window.metric_choices["tokens"].set.assert_called_once_with(True)
-        window.save_preferences.assert_not_called()
+        self.assertEqual(window.visible_metrics, ())
+        window.metric_choices["tokens"].set.assert_not_called()
+        window.save_preferences.assert_called_once()
 
     @unittest.skipUnless(sys.platform == "win32", "Exact renderer needs Windows")
     def test_every_selected_subset_renders_without_clipping(self):
@@ -150,8 +150,10 @@ class SelectionAndSettingsTests(unittest.TestCase):
         for size in range(1, len(style.ORDER) + 1):
             for selected in combinations(style.ORDER, size):
                 with self.subTest(selected=selected):
-                    width = style.width_for(selected)
-                    png, layout = render(dict(SNAPSHOT, visible_metrics=selected), width)
+                    from product_strip import layout_width
+                    snapshot=dict(SNAPSHOT,visible_metrics=selected)
+                    width=round(layout_width(snapshot))
+                    png,layout=render(snapshot,width)
                     dimensions, rows = decode_png(png)
                     self.assertEqual(dimensions[:2], (width, style.HEIGHT))
                     self.assertEqual(tuple(c["key"] for c in layout), selected)
@@ -206,7 +208,8 @@ class PersistentWorkerTests(unittest.TestCase):
                 context_worker.start()
                 kind, payload = window.results.get(timeout=2)
                 self.assertEqual(kind, "context")
-                self.assertTrue(payload[-1])
+                self.assertIs(payload[7],True)
+                self.assertIsInstance(payload[9],dict)
                 self.assertFalse(release.is_set())
                 window.stop.set()
                 release.set()

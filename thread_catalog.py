@@ -34,14 +34,16 @@ def recent(home, limit=20, include_archived=False, *, work_only=False):
                 if isinstance(identity,str) and re.fullmatch(r"[0-9a-fA-F-]{36}",identity)]
         wanted, names = {identity for identity,_ in rows}, {}
         try:
-            with (home/"session_index.jsonl").open(encoding="utf-8") as index:
+            with (home/"session_index.jsonl").open("rb") as index:
                 for line in index:
                     try:
                         record=json.loads(line)
+                        if not isinstance(record,dict):
+                            continue
                         identity,name=record.get("id"),record.get("thread_name")
-                        if identity in wanted and clean_title(name):
+                        if isinstance(identity,str) and identity in wanted and clean_title(name):
                             names[identity]=name
-                    except (ValueError,AttributeError):
+                    except (ValueError,UnicodeDecodeError):
                         continue
         except OSError:
             pass
