@@ -12,7 +12,13 @@ The application UI is currently in Chinese. UI language switching is planned; th
 
 ![Example usage strip](https://github.com/Mr-Elk/codex-pulse/releases/download/v0.7.0-beta.10/toolbar.png)
 
-This candidate is local only and has not been uploaded to Releases. Use the supplied local Windows ZIP.
+The beta.11 candidate is local only and has not been uploaded to Releases.
+
+## Codex Desktop and Codex CLI support
+
+- **Windows desktop strip (public beta):** 0.7.0-beta.10 offers following above the composer and a floating desktop mode that stays visible across applications. Composer location and automatic current-session following target Codex Desktop; the recent locator changes on `main` do not make the strip follow a CLI terminal. If a CLI session appears in the local work-session list and retains readable JSONL usage records, you can manually pin it to view its usage, but the strip will not automatically follow session switches in the terminal.
+- **Separate CLI status line (development preview):** It displays current Codex CLI session usage inside the terminal and, when quota display is enabled, shows account quota only if the account identity can be verified and quota data is available; otherwise quota is shown as unavailable. This is a separate local development preview, not publicly released and not included in the current public Windows download or `main` source.
+- **Still to be verified:** The CLI preview has had local run checks on macOS. Linux has not completed on-device acceptance, and native Windows terminals have not yet been integrated. Input methods, mouse scrolling, other terminals and devices, prolonged use, and actual system sleep/wake still need verification.
 
 ## Download and run
 
@@ -109,7 +115,7 @@ Recent usage offers 1/3/6/24 hours and a custom integer range of 1–168 hours. 
 
 Strip filters include recent usage, remaining allowance, natural reset, reset credits and the five existing conversation metrics. Choose the allowance window, recent range and capsule summary; narrow layouts fold whole fields. Optional local popup reminders support a selected window and 0–100% threshold. They establish a baseline before alerting and deduplicate each cycle/threshold. Reset credits are read-only in this version.
 
-The portable quota engine and stdio bridge are prepared for macOS. A native Mac shell and Apple Silicon installer still require implementation and Mac mini testing; see [MACOS.md](MACOS.md). This preview has not been published to GitHub.
+The macOS desktop companion also has local development candidates and has not been publicly released; see [MACOS.md](MACOS.md) for the plan currently in `main`.
 
 ## v19 local Windows review
 
