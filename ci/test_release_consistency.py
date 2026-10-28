@@ -97,13 +97,16 @@ class ReleaseConsistencyTests(unittest.TestCase):
 
     def test_rendered_readme_uses_product_version_and_rejects_unknown_placeholders(self):
         template = self.root / "distribution/README.md.in"
-        template.write_text("# Codex Pulse {{version}}\n[Guide](BETA_GUIDE.md)\n")
         def configure(spec):
             spec["runtime"].remove("README.md")
             spec["templates"]["README.md"] = "distribution/README.md.in"
         self.spec(configure)
-        files = selected_files(self.root)
-        self.assertTrue(files["README.md"].startswith(b"# Codex Pulse 1.2.3-beta.4\n"))
+        for newline in (b"\n", b"\r\n"):
+            template.write_bytes(b"# Codex Pulse {{version}}" + newline + b"[Guide](BETA_GUIDE.md)" + newline)
+            with self.subTest(newline=newline):
+                files = selected_files(self.root)
+                self.assertEqual(files["README.md"],
+                                 b"# Codex Pulse 1.2.3-beta.4" + newline + b"[Guide](BETA_GUIDE.md)" + newline)
         template.write_text("{{unknown_version}}")
         with self.assertRaisesRegex(ValueError, "Unresolved"):
             selected_files(self.root)
