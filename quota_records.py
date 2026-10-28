@@ -50,10 +50,15 @@ def aggregate_records(details,hours,now):
     return result
 
 def record_range(item):
-    a,b=datetime.fromtimestamp(item['start']),datetime.fromtimestamp(item['at'])
-    if a.date()!=b.date():return a.strftime('%m月%d日 %H:%M')+' – '+b.strftime('%m月%d日 %H:%M')
-    pattern='%H:%M:%S' if a.strftime('%H:%M')==b.strftime('%H:%M') else '%H:%M'
-    return a.strftime('%m月%d日 ')+a.strftime(pattern)+' – '+b.strftime(pattern)
+    a = datetime.fromtimestamp(item['start'])
+    b = datetime.fromtimestamp(item['at'])
+    # Keep Chinese literals outside locale-dependent strftime on Windows 3.10.
+    left_date = f'{a.month:02d}月{a.day:02d}日 '
+    if a.date() != b.date():
+        right_date = f'{b.month:02d}月{b.day:02d}日 '
+        return left_date + a.strftime('%H:%M') + ' – ' + right_date + b.strftime('%H:%M')
+    pattern = '%H:%M:%S' if (a.hour, a.minute) == (b.hour, b.minute) else '%H:%M'
+    return left_date + a.strftime(pattern) + ' – ' + b.strftime(pattern)
 
 def record_percent(value):
     if value is None:return '—'

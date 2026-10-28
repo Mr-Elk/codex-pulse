@@ -9,7 +9,11 @@ LABELS={'tokens':'Token','speed':'TPS','context':'上下文估算','cache':'缓�
 PRESETS={13:(36,16),15:(40,18),17:(44,20)}
 
 def moment(value):
-    return datetime.fromtimestamp(value).strftime('%m月%d日 %H:%M') if isinstance(value,(float,int)) and value>0 else '尚无记录'
+    if not (isinstance(value, (float, int)) and value > 0):
+        return '尚无记录'
+    local = datetime.fromtimestamp(value)
+    # Python 3.10 on Windows encodes strftime patterns with the system locale.
+    return f'{local.month:02d}月{local.day:02d}日 {local.hour:02d}:{local.minute:02d}'
 
 def age(value,now):
     if not isinstance(value,(float,int)):return '尚未读取'

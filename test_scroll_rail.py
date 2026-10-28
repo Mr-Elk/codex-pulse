@@ -15,6 +15,17 @@ def settle(root, seconds):
     root.update()
 
 
+def wait_for(root, predicate, timeout=3):
+    deadline = time.monotonic() + timeout
+    while True:
+        root.update()
+        if predicate():
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(.005)
+
+
 class ScrollRailTests(unittest.TestCase):
     from contextlib import contextmanager
     @contextmanager
@@ -45,7 +56,9 @@ class ScrollRailTests(unittest.TestCase):
                 self.assertEqual(bar.ink_width, 6*scale)
                 settle(root, 1.2)
                 self.assertEqual(bar.opacity, 1, "hover must prevent hiding")
-                bar.leave(); settle(root, 1.25)
+                bar.leave()
+                self.assertTrue(wait_for(root, lambda: bar.opacity == 0),
+                                "scroll rail did not finish fading within 3 seconds")
                 self.assertEqual(bar.opacity, 0)
                 self.assertFalse(bar.find_all())
                 self.assertEqual(widths,panel.tree.winfo_width())
