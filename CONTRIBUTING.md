@@ -77,7 +77,7 @@ python3 -X utf8 -B -m unittest ci.test_ci_runner -v
 
 CI 工具和自身测试集中在 `ci/`，由源码仓库的完整回归自动发现。Windows 运行载荷不包含 CI；开发载荷按明确清单保留测试及其依赖，不能靠自动收集根目录文件补依赖。
 
-Actions 固定完整提交 SHA，使用只读权限；外部 PR 仍遵守仓库的运行批准要求。CI 的受控窗口测试不代替真实桌面、目标缩放、截图或异机验收，不触发打包或发布。
+Actions 固定完整提交 SHA，使用只读权限；外部 PR 仍遵守仓库的运行批准要求。`Tests`、`Docs` 和 `Release consistency` 不生成产品包；下面的独立 `Windows candidate` 工作流会执行候选构建。所有 CI 受控窗口检查都不代替真实桌面、目标缩放、截图或异机验收。
 
 ## 文档链接检查
 
@@ -125,7 +125,9 @@ python -X utf8 -B ci/check_release.py --require-clean --archive /path/to/windows
 
 ## Windows 完整候选准备
 
-beta.12 的环境、锁定旧包输入、构建/回读命令和待验范围见 [Windows 候选构建说明](distribution/WINDOWS_CANDIDATE.md)。构建入口在干净 Windows 检出中编译原生组件并完成回归，使用新输出目录，默认安装到独立候选目录；不发布或上传。当前新增的 Windows 构建路径仍需在已指定设备上实际执行。
+beta.12 的环境、锁定旧包输入、构建/回读命令和待验范围见 [Windows 候选构建说明](distribution/WINDOWS_CANDIDATE.md)。构建入口在干净 Windows 检出中编译原生组件并完成回归，使用新输出目录，默认安装到独立候选目录；不发布或上传。`Windows candidate` 工作流在 PR、main 推送和手动触发时，使用 GitHub 托管的 Windows Server 2025、Python 3.12 x64 和现有 MSVC/SDK 执行同一入口，再用独立进程回读完整包。下载输入按仓库锁定摘要核验；任一步失败都阻止后续打包或成功回执，不降低原生加载与回归要求。
+
+候选 ZIP 只在该次 runner 的临时目录中生成；不上传 ZIP/DLL，不创建 Release 或标签。仅显式列出的编译/测试日志和来源/校验回执作为 Actions 附件保留 7 天，不能把附件当成私有存储或产品分发。原生编译/回归/冒烟结果以对应提交的运行日志为准；实机安装、升级回退、视觉、长测与异机验收仍待执行，CLI 不发布。
 
 跨平台的候选封装及失败保护检查使用临时夹具，不生成产品候选，也不证明原生 DLL 或真实 UI 通过：
 

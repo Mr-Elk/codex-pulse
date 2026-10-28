@@ -110,6 +110,7 @@
     ".github/workflows/docs.yml",
     ".github/workflows/release.yml",
     ".github/workflows/tests.yml",
+    ".github/workflows/windows-candidate.yml",
     ".gitignore",
     "AGENTS.md",
     "CANDIDATE_VALIDATION.md",
