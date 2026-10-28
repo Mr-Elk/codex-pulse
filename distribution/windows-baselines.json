@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "release": "v0.7.0-beta.10",
+  "url": "https://github.com/Mr-Elk/codex-pulse/releases/download/v0.7.0-beta.10/codex-pulse-0.7.0-beta.10-windows.zip",
+  "installer_sha256": "2f018aa6e8089cc90c1522a96318eecbab265bdd51096e402995e21627adeb19",
+  "prefix": "codex-pulse-0.7.0-beta.10-windows/",
+  "upgrade_version": "0.7.0-beta.10",
+  "upgrade_payload_sha256": "d69719bf8c89e85ce66b8374d6e69c6ed708ebf35df780ced19fa762d4a8d7de",
+  "recovery_version": "0.7.0-beta.6",
+  "recovery_payload_sha256": "0bb7da9b8db9c6f045b9135350d4cc3a01fa6786810acf33c6a8951f61abb077"
+}

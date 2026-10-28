@@ -1,6 +1,6 @@
 # Codex Pulse
 
-当前 `main` 源码包含 beta.11 定位辅助内存修复。公开下载仍为 beta.10，beta.11 仅为本地内测候选；已完成检查与待验项目见[候选验证说明](CANDIDATE_VALIDATION.md)。
+当前源码准备 Windows beta.12 本地候选，保留定位辅助内存修复并补齐构建一致性检查。公开下载仍为 beta.10；beta.12 尚未构建或完成实机验收，准备入口见[候选构建说明](distribution/WINDOWS_CANDIDATE.md)。[旧候选验证](CANDIDATE_VALIDATION.md)仅描述当时的包。
 
 简体中文 | [English](README.en.md)
 

@@ -3,14 +3,42 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from release_policy import clean_revision
+
+
+def candidate_identity():
+    revision = clean_revision(ROOT)
+    if sys.platform != "win32" or sys.maxsize <= 2**32 or revision is None:
+        raise ValueError("Candidate regression requires clean source and 64-bit Windows Python")
+    dll = ROOT / "assets/native/pulse_backdrop_x64.dll"
+    return {"source_revision": revision, "dll_sha256": hashlib.sha256(dll.read_bytes()).hexdigest()}
+
+
+def save_receipt(path, log, identity):
+    raw = Path(log).read_bytes()
+    text = raw.decode("utf-8-sig")
+    counts = re.findall(r"(?m)^Ran ([1-9][0-9]*) tests? in [0-9.]+s\s*$", text)
+    if len(counts) != 1 or text.strip().splitlines()[-1] != "OK":
+        raise ValueError("Candidate regression cannot contain failures or skips")
+    value = {"schema": 1, "platform": "windows-x64", "python": sys.version.split()[0],
+             **identity, "count": int(counts[0]), "result": "OK",
+             "log_sha256": hashlib.sha256(raw).hexdigest()}
+    with Path(path).open("x", encoding="utf-8") as stream:
+        json.dump(value, stream, indent=2)
 
 
 def run_logged(command, log_path, *, cwd, timeout):
@@ -66,29 +94,39 @@ def preflight():
     print("Windows PowerShell: available", flush=True)
 
 
-def run_ci(log_dir):
+def run_ci(log_dir, *, candidate_receipt=False):
     log_dir = Path(log_dir).resolve()
+    if candidate_receipt:
+        if (log_dir / "regression.json").exists():
+            raise FileExistsError("Candidate regression receipt already exists")
+        identity = candidate_identity()
     code = run_logged(
         [sys.executable, "-X", "utf8", "-B", str(Path(__file__).resolve()), "--preflight"],
         log_dir / "preflight.log", cwd=ROOT, timeout=45,
     )
     if code:
         return code
-    return run_logged(
+    code = run_logged(
         [sys.executable, "-X", "utf8", "-B", "-m", "unittest", "discover", "-v"],
         log_dir / "unittest.log", cwd=ROOT, timeout=900,
     )
+    if code == 0 and candidate_receipt:
+        if candidate_identity() != identity:
+            raise ValueError("Source or native DLL changed during regression")
+        save_receipt(log_dir / "regression.json", log_dir / "unittest.log", identity)
+    return code
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--log-dir", type=Path, default=Path("ci-logs"))
     parser.add_argument("--preflight", action="store_true")
+    parser.add_argument("--candidate-receipt", action="store_true")
     args = parser.parse_args(argv)
     if args.preflight:
         preflight()
         return 0
-    return run_ci(args.log_dir)
+    return run_ci(args.log_dir, candidate_receipt=args.candidate_receipt)
 
 
 if __name__ == "__main__":
