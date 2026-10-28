@@ -81,11 +81,12 @@ class RecoveryInstallTests(unittest.TestCase):
     def test_conflicting_existing_candidate_is_rejected_before_stopping(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);p=self.packages(root);target=root/'beta';manage.install(p['0.7.0-beta.10'],target)
-            source=root/'source-0.7.0-beta.10';(source/'overlay.py').write_text('different same-version package')
+            source=root/'source-0.7.0-beta.10';(source/'overlay.py').write_text('# different same-version package')
             from release_tools import build_archive
-            build_archive(source,p['0.7.0-beta.10'],include_tests=False)
+            replacement = root / 'different-content.zip'
+            build_archive(source,replacement,include_tests=False)
             with patch.object(manage,'stop') as stop:
-                with self.assertRaisesRegex(ValueError,'different package contents'):manage.install(p['0.7.0-beta.10'],target)
+                with self.assertRaisesRegex(ValueError,'different package contents'):manage.install(replacement,target)
                 stop.assert_not_called()
 
 

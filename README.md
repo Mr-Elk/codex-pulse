@@ -27,7 +27,7 @@ Windows 上的本地 Codex 会话统计条。查看 Token 用量、平均 TPS �
 
 本包附带beta.6作为回退基线，不再默认回到有Esc缺陷的beta.5。另一台电脑验收见随包acceptance目录。
 
-完整操作、环境与回退见 [内测指南](BETA_GUIDE.md)。升级时继续选择原安装目录，个人设置位于独立 data 目录；可通过“回退上一版.cmd”切回保留版本。
+完整操作、环境与回退见 [对应公开版本的内测指南](https://github.com/Mr-Elk/codex-pulse/blob/v0.7.0-beta.10/BETA_GUIDE.md)。升级时继续选择原安装目录，个人设置位于独立 data 目录；可通过“回退上一版.cmd”切回保留版本。
 
 ## 能做什么
 

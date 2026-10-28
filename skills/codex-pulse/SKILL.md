@@ -3,9 +3,9 @@ name: codex-pulse
 description: Operate the local Windows Codex statistics strip and its read-only account quota panel.
 ---
 
-# Codex Pulse 0.7.0-beta.10
+# Codex Pulse
 
-Resolve the plugin root two directories above this file. Windows requires Python 3.10+ with Tkinter and Windows PowerShell; no API key or third-party Python package. Mac currently has a shared data backend and an implementation plan, not a released native UI.
+Resolve the plugin root two directories above this file. Read the Windows product version from plugin.json in that root; do not infer it from this skill title. Windows requires Python 3.10+ with Tkinter and Windows PowerShell; no API key or third-party Python package. Mac currently has a shared data backend and an implementation plan, not a released native UI.
 
 Use the existing process when its creation identity and heartbeat are healthy. A saved running flag alone is insufficient. Use runtime_state.health and verify visible/native_visible separately. Never guess a conversation from the most recently modified file; automatic following accepts only an unambiguous current navigation title. Fixed statistics require a user-selected identity.
 

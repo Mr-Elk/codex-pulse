@@ -127,7 +127,7 @@ def install(archive, root, recovery_archive=None):
     # Versioned controller backup is outside caches and is never deleted.
     backup = root / "backups" / ("controller-" + uuid.uuid4().hex)
     backup.mkdir(parents=True)
-    for name in ("manage.py", "release_tools.py", "runtime_state.py"):
+    for name in ("manage.py", "release_tools.py", "release_policy.py", "product_version.py", "runtime_state.py"):
         target = controller / name
         if target.exists():
             shutil.copy2(target, backup / name)

@@ -1,0 +1,19 @@
+# Codex Pulse {{version}} · Windows payload
+
+This is the Windows application payload. Its version comes from the bundled `plugin.json`. It contains no Mac desktop or CLI distribution.
+
+## Codex Desktop and Codex CLI support
+
+Automatic composer following targets Codex Desktop. A readable CLI session can be selected manually when it appears in the local session list; the strip does not automatically follow CLI terminals. Separate CLI and native Mac previews are not included or published by this payload.
+
+## Installation and verification
+
+This ZIP is not the complete installer. Use the matching Windows distribution for installation, upgrades and rollback, keeping its tools, recovery and acceptance directories. Do not extract a payload over an existing installation.
+
+Windows 11 x64, Python 3.10+ with Tkinter, and Windows PowerShell are required. Fonts and licenses are included. The native backdrop DLL is an optional build input; without it the translucent SVG surface remains available.
+
+- [Usage and recovery guide (Chinese)](BETA_GUIDE.md)
+- [Version notes (Chinese)](RELEASE_NOTES.md)
+- [License](LICENSE)
+
+`release-manifest.json` records the file hashes, Windows product version, payload profile and verified source revision when available. An empty `source_revision` identifies an experiment or test payload, not a release candidate with confirmed provenance. Historical acceptance results do not validate this payload; release acceptance must refer to its actual digest.
