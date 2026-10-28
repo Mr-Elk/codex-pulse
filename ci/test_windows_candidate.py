@@ -2,6 +2,7 @@
 import io
 from contextlib import redirect_stderr
 import json
+import os
 from pathlib import Path
 import shutil
 import struct
@@ -261,6 +262,13 @@ class WindowsCandidateTests(unittest.TestCase):
 class CandidatePowerShellTests(unittest.TestCase):
     """Run the real wrapper with isolated boundary stubs, never a compiler or product."""
 
+    def setUp(self):
+        # pwsh -> Python -> powershell.exe otherwise inherits PowerShell 7 modules.
+        # Let Windows PowerShell construct its own search path, without changing
+        # the parent environment or the user's persistent configuration.
+        self.powershell_env = {key: value for key, value in os.environ.items()
+                               if key.upper() != "PSMODULEPATH"}
+
     @staticmethod
     def quote(value):
         return "'" + str(value).replace("'", "''") + "'"
@@ -306,7 +314,7 @@ class CandidatePowerShellTests(unittest.TestCase):
     def test_real_wrapper_passes_spaced_paths_and_boundaries_in_order(self):
         with tempfile.TemporaryDirectory(prefix="pulse script checks ") as directory:
             command, output, events = self.fixture(directory)
-            result = subprocess.run(command, cwd=directory, capture_output=True, timeout=45)
+            result = subprocess.run(command, cwd=directory, env=self.powershell_env, capture_output=True, timeout=45)
             self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
             self.assertEqual(events.read_text(encoding="utf-8-sig").splitlines(),
                              ["source", "inputs", "native", "tests", "smoke", "build"])
@@ -316,12 +324,27 @@ class CandidatePowerShellTests(unittest.TestCase):
         for failure, last in (("source", "source"), ("native", "native"), ("tests", "tests"), ("smoke", "smoke")):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory(prefix="pulse script failure ") as directory:
                 command, output, events = self.fixture(directory, failure)
-                result = subprocess.run(command, cwd=directory, capture_output=True, timeout=45)
+                result = subprocess.run(command, cwd=directory, env=self.powershell_env, capture_output=True, timeout=45)
                 self.assertNotEqual(result.returncode, 0)
                 steps = events.read_text(encoding="utf-8-sig").splitlines()
                 self.assertEqual(steps[-1], last)
                 self.assertNotIn("build", steps)
                 self.assertFalse((output / "codex-pulse-1.2.3-windows.zip").exists())
+
+    def test_builtin_hash_and_signature_checks_load_in_system_powershell(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sample = Path(directory) / "unsigned.ps1"
+            sample.write_bytes(b"# isolated unsigned fixture, never executed\n")
+            command = ("$ErrorActionPreference = 'Stop'; @{ hash = "
+                       "(Get-FileHash -Algorithm SHA256 -LiteralPath " + self.quote(sample) +
+                       ").Hash.ToLowerInvariant(); signature = "
+                       "(Get-AuthenticodeSignature -LiteralPath " + self.quote(sample) +
+                       ").Status.ToString() } | ConvertTo-Json -Compress")
+            result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+                                    env=self.powershell_env, capture_output=True, timeout=20)
+            self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+            self.assertEqual(json.loads(result.stdout),
+                             {"hash": digest(sample.read_bytes()), "signature": "NotSigned"})
 
     def test_native_and_candidate_scripts_parse_in_windows_powershell(self):
         paths = [SOURCE / name for name in ("build_native.ps1", "distribution/build_candidate.ps1", "distribution/install.ps1")]
@@ -333,7 +356,7 @@ class CandidatePowerShellTests(unittest.TestCase):
                               "  [System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors) | Out-Null\n"
                               "  if ($errors.Count) { throw ($errors | Out-String) }\n}\n", encoding="utf-8-sig")
             result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(script)],
-                                    capture_output=True, timeout=20)
+                                    env=self.powershell_env, capture_output=True, timeout=20)
             self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
 
 
