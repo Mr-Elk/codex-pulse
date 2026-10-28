@@ -5,26 +5,32 @@
 Codex Pulse is a Windows beta. Security fixes are provided for the latest published
 Windows build only.
 
-| Version | Supported |
+| Version | Security-fix support |
 | --- | --- |
 | `0.7.0-beta.x` (latest Windows beta) | ✅ |
 | `0.6.x` and older betas | ❌ |
-| Source snapshots and unreleased branches | ❌ |
+| Source snapshots and unreleased previews | No release-support commitment; reports welcome |
 
 The Windows build supports Windows 11 x64 and requires Python 3.10+ with Tkinter and
-Windows PowerShell. macOS has a shared Python backend but no native window or signed
-build yet; see [MACOS.md](MACOS.md). A CLI front end for Linux and Windows terminals is
-in development and is not covered by this policy until it is published.
+Windows PowerShell. Native macOS desktop and separate CLI status-line previews exist
+as local development candidates; neither has been publicly released. See the
+[support overview](README.en.md#codex-desktop-and-codex-cli-support) for availability
+and verification limits, and [MACOS.md](MACOS.md) for the Mac plan in this checkout.
+
+Release-support status does not determine whether a report is welcome. Please report
+security or privacy problems in actively developed source and preview versions too,
+including shared code. We may ask whether an older-version issue also affects current
+source or the latest supported release. This does not promise backports or a response
+deadline for unpublished or older versions.
 
 ## Reporting a Vulnerability
 
 Please do not open a public issue with exploit details, secrets, session content, or
 personal paths.
 
-Preferred: use GitHub private vulnerability reporting, if it is enabled for this
-repository:
+GitHub private vulnerability reporting is enabled for this repository. Please use:
 
-https://github.com/Mr-Elk/codex-pulse/security/advisories/new
+[Report a vulnerability privately](https://github.com/Mr-Elk/codex-pulse/security/advisories/new)
 
 If private reporting is unavailable, open a minimal public issue stating that you have
 a security report and asking for a private channel. Do not include technical details in
@@ -32,9 +38,10 @@ that issue.
 
 Please include:
 
-- Codex Pulse version and whether you use the Windows ZIP or the source launcher.
-- Windows version and build, display scaling, and whether you use composer-following or
-  desktop capsule mode.
+- Codex Pulse version, distribution or source commit, and whether it is a local preview.
+- Operating system and architecture; for Windows UI issues, include the Windows build,
+  display scaling, and composer-following or desktop mode. For CLI issues, include the
+  terminal, Python, GNU screen, and Codex CLI versions.
 - A short description of the issue and its impact.
 - Minimal reproduction steps.
 - Sanitized logs or screenshots, with session titles, UUIDs, user names, local paths,
@@ -51,7 +58,8 @@ Please do not include:
 
 In scope:
 
-- Codex Pulse Python code, including the overlay, settings, and rendering paths.
+- Codex Pulse code, including the overlay, settings, rendering paths, and actively
+  developed macOS and CLI previews when the affected source or candidate is available.
 - PowerShell launch, install, upgrade, and rollback scripts, and the `.cmd` entry points.
 - Release packaging, asset handling, and `SHA256SUMS.txt` verification.
 - The optional native blur DLL (`native_backdrop.cpp`) and `build_native.ps1`.
@@ -65,32 +73,45 @@ In scope:
 
 Out of scope:
 
-- Vulnerabilities in Codex, ChatGPT, Windows, Python, Tkinter, or other third-party
-  software.
+- Vulnerabilities solely in Codex, ChatGPT, the operating system, Python, Tkinter, or
+  other third-party software. Unsafe integration or exposure caused by Pulse remains
+  in scope.
 - Issues requiring physical access, administrator compromise, or an already-compromised
   local account.
-- Denial of service that only affects the local user's own session.
-- Social engineering and reports against unsupported versions.
+- Resource exhaustion caused solely by deliberately overloading your own application.
+  Resource exhaustion triggered by attacker-controlled input crossing a Pulse trust
+  boundary is not excluded solely because Pulse runs locally.
+- Social engineering.
 
 Codex Pulse is an independent project, not an OpenAI product. Please do not report Codex
 Pulse issues to OpenAI.
 
 ## Security Design and Threat Model
 
-Codex Pulse is designed as a local, read-only companion:
+The published Windows companion reads existing session and account data. The following
+describes that implementation; an interactive CLI preview has additional operations
+for the user's Codex session and is not restricted to the quota-reader allowlist.
 
 - It does not require an API key and does not upload session data to a third party.
 - It reads local Codex session JSONL files and `logs_2.sqlite` in read-only mode.
-- It reads `%CODEX_HOME%` (default `~/.codex`) and does not write to it.
+- Pulse reads Codex session and timing records under `%CODEX_HOME%` (default `~/.codex`)
+  without modifying those records. Pulse settings, runtime state, and usage history
+  have separate storage.
 - Account quota is read through the local Codex app-server over stdio, using an
   allowlist limited to `initialize`, `account/read`, and `account/rateLimits/read`.
-  It never opens auth files and never starts a model turn.
+  The Pulse quota reader does not directly open authentication files or start a model
+  turn. The official Codex child process manages its own authentication and runtime
+  state and may contact official services to obtain account quota. This feature is not
+  fully offline, and read-only quota requests are not a promise that the child process
+  makes no local writes.
 - Its UI Automation probe reads window and control labels and rectangles. It does not
   read draft text, message bodies, or `ValuePattern`/`TextPattern` content.
-- A local HTTP endpoint used for the status surface binds to loopback and rejects
-  requests whose `Origin` is not the local page.
+- The optional source HTTP status surface binds to loopback and checks Host, Origin
+  when supplied, and cross-site browser request metadata. These browser checks alone
+  are not authentication of other local processes or operating-system users.
 - It does not modify Codex installation files, install a service, or add auto-start.
-  Settings, runtime state, and logs stay under the local user's profile.
+  Settings, runtime state, and logs remain local, normally under the user's profile or
+  an explicitly selected installation/data directory.
 - The Windows release contains a prebuilt x64 blur DLL. Its source and build script are
   in the repository. `SHA256SUMS.txt` is an integrity check, not a code signature.
 
