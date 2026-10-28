@@ -59,3 +59,16 @@ python -X utf8 -B -m unittest discover -q
 发布文件使用 release_tools.py 生成并核对 SHA256，包含 LICENSE。DLL、PNG 导出、安装包、截图、缓存与本机数据不提交源码；预编译 DLL 和界面示例作为 Release 附件提供。
 
 请勿在 Issue、提交或附件中包含个人设置、会话数据、原始日志、私有安装指针或凭据。使用示例数据复现问题。
+
+## 文档链接检查
+
+需要 Python 3.10+ 和 Git，可在 Windows、macOS 或 Linux 上执行：
+
+```sh
+python -X utf8 -B -m unittest test_doc_links -v
+python -X utf8 -B ci/check_doc_links.py
+```
+
+检查 Git 跟踪的 Markdown 中的本地链接、图片和 Markdown 锚点；新增文件需先暂存。支持常用行内与引用链接、标题、URL 编码及显式 HTML 锚点，忽略围栏代码、行内代码和 HTML 注释。它不检查外网可用性、HTML 文件内部锚点，也不是完整 Markdown 渲染器。失败会显示源文件、行号和目标。
+
+Docs 工作流在所有 PR、main 推送和手动运行时执行以上检查，因此仅删除或重命名目标文件也会触发；本机忽略文件不能让链接误通过。

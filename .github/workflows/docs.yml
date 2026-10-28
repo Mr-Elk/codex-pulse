@@ -1,43 +1,30 @@
 name: Docs
 
 on:
+  push:
+    branches: [main]
   pull_request:
-    paths:
-      - "**/*.md"
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   links:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - name: Check local Markdown links
-        run: |
-          python - <<'PY'
-          import pathlib, re, sys
-
-          root = pathlib.Path(".")
-          pattern = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
-          missing = []
-
-          for md in root.rglob("*.md"):
-              if ".git" in md.parts:
-                  continue
-              for target in pattern.findall(md.read_text(encoding="utf-8", errors="ignore")):
-                  if target.startswith(("http://", "https://", "#", "mailto:")):
-                      continue
-                  path = (md.parent / target.split("#")[0]).resolve()
-                  if not path.exists():
-                      missing.append(f"{md}: {target}")
-
-          if missing:
-              print("\n".join(missing))
-              sys.exit(1)
-          print("all local links resolve")
-          PY
+      - name: Test the link checker
+        run: python -X utf8 -B -m unittest test_doc_links -v
+      - name: Check tracked Markdown links
+        run: python -X utf8 -B ci/check_doc_links.py
