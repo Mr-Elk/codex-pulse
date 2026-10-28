@@ -49,7 +49,9 @@ def window_name(minutes):
 
 def clock_text(value):
     if timestamp(value) is None:return "暂未提供"
-    return datetime.fromtimestamp(value,timezone.utc).astimezone().strftime("%m 月 %d 日 %H:%M")
+    local = datetime.fromtimestamp(value, timezone.utc).astimezone()
+    # Chinese literals must not pass through the Windows 3.10 locale codec.
+    return f"{local.month:02d} 月 {local.day:02d} 日 {local.hour:02d}:{local.minute:02d}"
 
 
 def countdown(value,now):
