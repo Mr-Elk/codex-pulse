@@ -1,6 +1,6 @@
 # Windows beta.12 候选构建准备
 
-状态：本分支准备 **0.7.0-beta.12**；尚未执行 Windows 编译、完整安装包生成或实机验收。公开版本仍为 beta.10，CLI 不发布。历史 beta.11 验收仅属于旧包，不复用其摘要或通过数量。
+状态：本分支准备 **0.7.0-beta.12**；Windows 编译、完整安装包生成与回读已接入 Actions，实际结果以对应提交的运行记录为准。实机验收仍待执行，公开版本仍为 beta.10，CLI 不发布。历史 beta.11 验收仅属于旧包，不复用其摘要或通过数量。
 
 ## 固定输入
 
@@ -13,6 +13,16 @@ python -X utf8 -B distribution/windows_candidate.py inputs --baseline D:\PulseIn
 ```
 
 检查和构建命令只使用显式输入，不自动下载、安装依赖、连接设备或上传。Windows 构建机需要现有的 Visual Studio C++ x64 Build Tools、Windows SDK、Git、64 位 Python 3.10+（含 Tkinter）和 Windows PowerShell。
+
+## GitHub Actions 验证
+
+仓库的 [Windows candidate 工作流](../.github/workflows/windows-candidate.yml) 在 PR、main 推送或手动运行时，使用 GitHub 托管 Windows Server 2025、Python 3.12 x64 和 runner 现有的 Visual Studio/Windows SDK，调用下方同一构建入口。源码采用该次检出的干净提交；PR 检查默认是 GitHub 的临时合并提交，不能误记成分支头提交。
+
+工作流先下载锁定的公开 beta.10 输入并校验，再编译原生 DLL、执行完整回归和真实 DLL 冒烟、生成候选 ZIP，最后在独立进程中回读校验。任一步失败就停止，原生合成不可用时也明确失败；不改用户透明度设置或把检查改成跳过。每次 runner 使用全新临时目录，重跑不会覆盖本机候选。
+
+Actions 摘要记录版本、实际源码提交及完整包 SHA256。仅编译/测试日志、native-build.json、regression.json、native-smoke.json 和 verification.json 按明确列表保留 7 天；日志来自一次性 runner，不能混入个人数据。GitHub 有仓库读取权限的登录用户可下载 Actions 附件，因此 **ZIP 和 DLL 不上传**，临时安装包随 runner 回收。工作流没有 Release、标签、安装或 CLI 构建步骤，权限保持只读。
+
+每次成功只证明该 runner 上记录的构建和自动检查。Windows 实机安装、运行中的 beta.10 升级、beta.6 回退、再升级、数据保留、视觉、睡眠唤醒和异机验收仍为待办；包内人工结果保持 `not_run`。后续确需保留可分发包时，应先确认分发范围与存储权限。
 
 ## 构建入口
 
@@ -50,4 +60,4 @@ python -X utf8 -B distribution/windows_candidate.py verify `
 
 接入已指定的 Windows 设备后按 [实机验收清单](ACCEPTANCE.md) 完成新装、运行中的公开 beta.10 升级、beta.6 回退、再升级，以及数据保留、失败恢复和真实窗口检查。当前这些结果全部待执行；构建成功也不会把 RESULTS.json 自动勾成通过。
 
-本轮准备不创建 GitHub Release、发布标签或公开附件，不签名或公证，不构建 CLI。源码提交、候选构建、安装验收与公开发布继续按各自授权执行。
+该流程不创建 GitHub Release、发布标签或公开安装包，不签名或公证，不构建 CLI。Actions 仅保存上述日志与回执。源码提交、候选构建、安装验收与公开发布继续按各自授权执行。

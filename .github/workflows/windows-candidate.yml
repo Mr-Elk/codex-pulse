@@ -1,0 +1,94 @@
+name: Windows candidate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  candidate:
+    name: Native build and candidate verification
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        # Run the documented Windows PowerShell entry point directly.
+        shell: powershell
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+
+      - name: Download and verify the locked public baseline
+        timeout-minutes: 5
+        run: |
+          $baseline = Join-Path $env:RUNNER_TEMP 'pulse-baseline.zip'
+          if (Test-Path -LiteralPath $baseline) { throw 'Baseline output already exists.' }
+          $lock = Get-Content -Raw -Encoding UTF8 distribution/windows-baselines.json | ConvertFrom-Json
+          Invoke-WebRequest -UseBasicParsing -Uri $lock.url -OutFile $baseline -TimeoutSec 120
+          python -X utf8 -B distribution/windows_candidate.py inputs --baseline $baseline
+          if ($LASTEXITCODE -ne 0) { throw 'Locked baseline verification failed.' }
+
+      - name: Compile native DLL and build the candidate
+        timeout-minutes: 20
+        run: |
+          $candidate = Join-Path $env:RUNNER_TEMP 'pulse-candidate'
+          $baseline = Join-Path $env:RUNNER_TEMP 'pulse-baseline.zip'
+          & ./distribution/build_candidate.ps1 -OutputDirectory $candidate -BaselineInstaller $baseline
+
+      - name: Independently verify the complete candidate
+        run: |
+          $candidate = Join-Path $env:RUNNER_TEMP 'pulse-candidate'
+          $baseline = Join-Path $env:RUNNER_TEMP 'pulse-baseline.zip'
+          $version = (Get-Content -Raw -Encoding UTF8 plugin.json | ConvertFrom-Json).version
+          $archive = Join-Path $candidate "codex-pulse-$version-windows.zip"
+          python -X utf8 -B distribution/windows_candidate.py verify `
+            --archive $archive --baseline $baseline `
+            --native-receipt (Join-Path $candidate 'native-build/native-build.json') `
+            --smoke-receipt (Join-Path $candidate 'native-smoke.json') `
+            --test-log (Join-Path $candidate 'checks/unittest.log') | Tee-Object -Variable verification
+          if ($LASTEXITCODE -ne 0) { throw 'Independent candidate verification failed.' }
+          $verification | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $candidate 'verification.json')
+          $report = $verification -join "`n" | ConvertFrom-Json
+          @(
+            '## Windows candidate checked on the hosted runner',
+            ('Version: ' + $report.version),
+            ('Source commit: ' + $report.source_revision),
+            ('Candidate SHA256: ' + $report.sha256),
+            'Manual installation, upgrade, rollback and desktop acceptance: NOT RUN.',
+            'The candidate ZIP and DLL are not uploaded. No Release, tag or CLI package is published.'
+          ) -join "`n`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      # Explicit diagnostics only: never upload the output directory or *.zip/*.dll.
+      - name: Preserve build diagnostics and verification receipts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-candidate-checks-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/pulse-candidate/native-build/compiler.log
+            ${{ runner.temp }}/pulse-candidate/native-build/native-build.json
+            ${{ runner.temp }}/pulse-candidate/checks/preflight.log
+            ${{ runner.temp }}/pulse-candidate/checks/unittest.log
+            ${{ runner.temp }}/pulse-candidate/checks/regression.json
+            ${{ runner.temp }}/pulse-candidate/native-smoke.json
+            ${{ runner.temp }}/pulse-candidate/verification.json
+          if-no-files-found: warn
+          retention-days: 7

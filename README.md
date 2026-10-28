@@ -1,6 +1,6 @@
 # Codex Pulse
 
-当前源码准备 Windows beta.12 本地候选，保留定位辅助内存修复并补齐构建一致性检查。公开下载仍为 beta.10；beta.12 尚未构建或完成实机验收，准备入口见[候选构建说明](distribution/WINDOWS_CANDIDATE.md)。[旧候选验证](CANDIDATE_VALIDATION.md)仅描述当时的包。
+当前源码准备 Windows beta.12 本地候选，保留定位辅助内存修复并补齐构建一致性检查。公开下载仍为 beta.10；beta.12 的原生构建与候选打包接入 Actions，具体结果以对应运行记录为准，实机验收仍待完成。流程见[候选构建说明](distribution/WINDOWS_CANDIDATE.md)。[旧候选验证](CANDIDATE_VALIDATION.md)仅描述当时的包。
 
 简体中文 | [English](README.en.md)
 

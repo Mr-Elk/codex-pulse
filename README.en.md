@@ -1,6 +1,6 @@
 # Codex Pulse
 
-The source prepares the Windows beta.12 local candidate, retaining the locator memory fix and adding build consistency checks. Public downloads remain beta.10. Beta.12 has not been built or accepted on a Windows desktop; see [candidate preparation](distribution/WINDOWS_CANDIDATE.md). [Historical validation](CANDIDATE_VALIDATION.md) applies only to its original package.
+The source prepares the Windows beta.12 local candidate, retaining the locator memory fix and adding build consistency checks. Public downloads remain beta.10. Actions runs the beta.12 native build and candidate packaging checks; results belong to each workflow run, and physical desktop acceptance remains pending. See [candidate preparation](distribution/WINDOWS_CANDIDATE.md). [Historical validation](CANDIDATE_VALIDATION.md) applies only to its original package.
 
 [简体中文](README.md) | English
 
