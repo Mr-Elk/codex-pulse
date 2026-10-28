@@ -10,6 +10,12 @@ Windows 上的本地 Codex 会话统计条。查看 Token 用量、平均 TPS �
 
 ![统计条示例](https://github.com/Mr-Elk/codex-pulse/releases/download/v0.7.0-beta.10/toolbar.png)
 
+## Codex Desktop 与 Codex CLI 的支持范围
+
+- **Windows 桌面统计条（已公开测试）：**0.7.0-beta.10 提供输入框上方跟随和跨应用显示的桌面悬浮模式。输入框定位和当前会话自动跟随面向 Codex Desktop；`main` 中最近的定位器更新也不能直接跟随 CLI 终端。若 CLI 会话出现在本地工作会话列表且保留可读的 JSONL 用量记录，可以手动固定查看其用量，但不会自动跟随终端中的会话切换。
+- **独立 CLI 状态行（开发预览）：**它在终端内显示当前 Codex CLI 会话用量，开启额度显示时，仅在账户身份可验证且额度数据可用时显示账户额度；否则显示不可用。这是独立于桌面统计条的本地开发预览，尚未公开发布，也不包含在当前公开的 Windows 下载或 `main` 源码中。
+- **仍待验证：**CLI 预览已在 macOS 上进行本地运行检查；Linux 尚未完成实机验收，Windows 原生终端尚未接入。输入法、鼠标滚动、其他终端和设备、长期运行以及真实系统睡眠唤醒等场景仍需验证。
+
 ## 下载与启动
 
 1. 从[发行页](https://github.com/Mr-Elk/codex-pulse/releases/tag/v0.7.0-beta.10)下载 `codex-pulse-0.7.0-beta.10-windows.zip`。截图使用当前界面与演示数据，不包含真实账户或会话。
@@ -99,7 +105,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build_native.ps1
 
 **统计条**可选择新增的最近用量、剩余额度、自然重置和重置卡，设置关注窗口、时间范围与收起状态的显示内容；空间不足会折叠完整字段。**账户 → 设置提醒**可选窗口与 0–100% 阈值，默认关闭；首次建立基线，穿越阈值后显示本机浮窗。同一周期与阈值去重。重置卡首版只查看数量、状态与到期时间，实际使用请在官方客户端确认。
 
-Mac 复用额度后端，原生窗口与 Apple Silicon 安装包尚未交付；详情与可运行后端命令见 [MACOS.md](MACOS.md)。本版只发布Windows测试包。
+macOS 桌面伴随程序也有本地开发候选，尚未公开发布；当前 `main` 中的相关计划见 [MACOS.md](MACOS.md)。
 
 ## v19 Windows 本地验收
 
