@@ -72,7 +72,22 @@ python -X utf8 -B ci/run_windows_tests.py --log-dir ci-logs
 环境和回归分别保留 `preflight.log`、`unittest.log`，成功或失败均上传日志；保留子进程退出码，启动失败和超时明确失败。环境检查上限 45 秒、回归上限 900 秒，整个作业上限 20 分钟。运行器本身的跨平台故障检查：
 
 ```sh
-python3 -X utf8 -B -m unittest test_ci_runner -v
+python3 -X utf8 -B -m unittest ci.test_ci_runner -v
 ```
 
+CI 工具和自身测试集中在 `ci/`，由源码仓库的完整回归自动发现；它们不进入现有应用分发清单，避免根目录测试被收集后缺少 CI 依赖。
+
 Actions 固定完整提交 SHA，使用只读权限；外部 PR 仍遵守仓库的运行批准要求。CI 的受控窗口测试不代替真实桌面、目标缩放、截图或异机验收，不触发打包或发布。
+
+## 文档链接检查
+
+需要 Python 3.10+ 和 Git，可在 Windows、macOS 或 Linux 上执行：
+
+```sh
+python -X utf8 -B -m unittest ci.test_doc_links -v
+python -X utf8 -B ci/check_doc_links.py
+```
+
+检查 Git 跟踪的 Markdown 中的本地链接、图片和 Markdown 锚点；新增文件需先暂存。支持常用行内与引用链接、标题、URL 编码及显式 HTML 锚点，忽略围栏代码、行内代码和 HTML 注释。它不检查外网可用性、HTML 文件内部锚点，也不是完整 Markdown 渲染器。失败会显示源文件、行号和目标。
+
+Docs 工作流在所有 PR、main 推送和手动运行时执行以上检查，因此仅删除或重命名目标文件也会触发；本机忽略文件不能让链接误通过。
