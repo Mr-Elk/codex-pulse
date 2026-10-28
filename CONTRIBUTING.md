@@ -75,7 +75,7 @@ python -X utf8 -B ci/run_windows_tests.py --log-dir ci-logs
 python3 -X utf8 -B -m unittest ci.test_ci_runner -v
 ```
 
-CI 工具和自身测试集中在 `ci/`，由源码仓库的完整回归自动发现；它们不进入现有应用分发清单，避免根目录测试被收集后缺少 CI 依赖。
+CI 工具和自身测试集中在 `ci/`，由源码仓库的完整回归自动发现。Windows 运行载荷不包含 CI；开发载荷按明确清单保留测试及其依赖，不能靠自动收集根目录文件补依赖。
 
 Actions 固定完整提交 SHA，使用只读权限；外部 PR 仍遵守仓库的运行批准要求。CI 的受控窗口测试不代替真实桌面、目标缩放、截图或异机验收，不触发打包或发布。
 
@@ -91,3 +91,34 @@ python -X utf8 -B ci/check_doc_links.py
 检查 Git 跟踪的 Markdown 中的本地链接、图片和 Markdown 锚点；新增文件需先暂存。支持常用行内与引用链接、标题、URL 编码及显式 HTML 锚点，忽略围栏代码、行内代码和 HTML 注释。它不检查外网可用性、HTML 文件内部锚点，也不是完整 Markdown 渲染器。失败会显示源文件、行号和目标。
 
 Docs 工作流在所有 PR、main 推送和手动运行时执行以上检查，因此仅删除或重命名目标文件也会触发；本机忽略文件不能让链接误通过。
+
+## 发布一致性检查
+
+当前主分支的门禁覆盖 Windows：`plugin.json` 是产品版本来源，`product_version.py` 读取它，账户连接不再维护另一个版本常量。共享额度客户端允许调用入口显式传入 `client_version`；Mac/CLI 合入时应分别传入自身版本并补齐该模块的分发依赖，不能沿用 Windows 版本或因此发布 CLI。
+
+```sh
+python -X utf8 -B -m unittest ci.test_release_consistency test_product_version test_release_tools -v
+python -X utf8 -B ci/check_release.py
+```
+
+第二条检查当前工作文件，适用于提交前。检查 Windows 安装器的候选/回退版本、明确文件清单、Python 字面量导入依赖、LICENSE、候选指南版本，以及**实际入包文件之间**的文档链接和锚点。两种语言的公开 README 指向公开版本的固定指南，不跟随开发候选。检查失败返回非零状态。
+
+`distribution/windows-package.json` 明确列出 `runtime`、`development` 和可选原生 DLL；没有通配符，新增文件不会自动入包。新增本地依赖要随调用方加入清单。包内 README 从 `.md.in` 模板生成，版本取自 `plugin.json`；BETA_GUIDE 和 RELEASE_NOTES 的内容及版本仍需在候选变化时审阅。历史验证材料仅留在开发资料中，不能作为当前运行载荷的验收证据。
+
+提交后或发布准备时，从干净的 Git 检出检查来源；新 `Release consistency` 工作流在所有 PR、main 推送和手动运行时自动执行：
+
+```sh
+python -X utf8 -B ci/check_release.py --require-clean
+```
+
+在已获打包授权并生成实际 Windows 载荷后，从**构建所用的同一源码提交**核对归档：
+
+```sh
+python -X utf8 -B ci/check_release.py --require-clean --archive /path/to/windows-payload.zip --profile runtime
+```
+
+开发载荷使用 `--profile development`。该命令复用 `release_tools.verify_archive` 校验，再对照源码清单核对每个文件、摘要、平台、版本和源码提交；即使有人重算了包内校验值，漏文件、混入其他平台或旧源码归档仍失败。它不会构建、安装或发布。
+
+`release_tools.build_archive` 保留原有 `include_tests` 接口，分别选择开发或运行清单；新归档格式记录 `platform`、`profile`、`source_revision`，并拒绝覆盖已有输出。非 Git 或有未提交内容的实验/测试载荷会记录空的来源，不能通过发布归档来源核验。已有旧格式回退包继续使用原校验流程，不要求重写旧资产。测试只在临时目录构造小型夹具包。
+
+该检查不等于完整安装外壳、原生 DLL 构建来源、签名、长期运行或实机界面验收；这些仍须针对实际候选另行验证。Mac/CLI 尚未合入本分支的打包器不由 Windows 门禁代验，已有本地包也不因本次合并而获准发布。

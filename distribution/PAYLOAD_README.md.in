@@ -1,0 +1,19 @@
+# Codex Pulse {{version}} · Windows 载荷
+
+这是 Windows 应用载荷，版本来自包内 `plugin.json`。它不包含 Mac 桌面或 CLI 分发。
+
+## Codex Desktop 与 Codex CLI 支持范围
+
+输入框自动跟随面向 Codex Desktop。CLI 会话若出现在本地会话列表且存在可读记录，可以手动固定查看；统计条不会自动跟随 CLI 终端。此载荷不包含或发布独立 CLI 和 Mac 原生预览。
+
+## 安装与验证
+
+本 ZIP 不是完整安装外壳。普通安装、升级和回退请使用对应版本的完整 Windows 安装包，保留其 tools、recovery 和 acceptance 目录；不要把载荷 ZIP 当作安装器直接覆盖已有目录。
+
+主要支持 Windows 11 x64，需要 Python 3.10+（含 Tkinter）和 Windows PowerShell。字体和许可随载荷提供；原生背景 DLL 为可选构建输入，缺少时保留半透明 SVG 表面。
+
+- [操作与恢复指南](BETA_GUIDE.md)
+- [本版说明](RELEASE_NOTES.md)
+- [许可证](LICENSE)
+
+`release-manifest.json` 记录实际文件摘要、Windows 产品版本、载荷类型及可确认的源码提交。`source_revision` 为空的实验或测试载荷不能作为已固定来源的发布候选。历史验收数量不证明当前载荷已通过实机验收；发布前还需生成与本包摘要匹配的新记录。

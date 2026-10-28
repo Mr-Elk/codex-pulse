@@ -9,38 +9,32 @@ import time
 import uuid
 import zipfile
 
-EXTRA_FILES = {"UI_RULES.html", "MACOS.md", "QUOTA_VALIDATION.md", "README.en.md", "LICENSE", "CONTRIBUTING.md", "VALIDATION.md", "README.md", "CHANGELOG.md", "BETA_GUIDE.md", "RELEASE_NOTES.md", "plugin.json", "index.html", "launch.cmd", "回退上一版本.cmd"}
+from product_version import windows_version
+from release_policy import clean_revision, selected_files
 
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def package_files(root):
-    files = []
-    for file in root.rglob("*"):
-        relative = file.relative_to(root)
-        if file.is_symlink():
-            raise ValueError(f"Symlink cannot be packaged: {relative}")
-        if not file.is_file() or "__pycache__" in relative.parts:
-            continue
-        if (len(relative.parts) == 1 and (file.suffix in (".py", ".ps1", ".cpp") or file.name in EXTRA_FILES)) or relative.parts[0] in ("assets", "skills"):
-            files.append((relative.as_posix(), file.read_bytes()))
-    return sorted(files)
+def package_files(root, include_tests=True):
+    return sorted(selected_files(root, include_tests=include_tests).items())
 
 
 def build_archive(root, output, include_tests=True):
     root, output = Path(root), Path(output)
-    plugin = json.loads((root / "plugin.json").read_text(encoding="utf-8"))
-    assert plugin["name"] == "codex-pulse"
-    developer_files={"build_native.ps1","native_backdrop.cpp","rollback.ps1","回退上一版本.cmd"}
-    files = {name: data for name, data in package_files(root)
-             if include_tests or (not name.startswith("test_") and name not in developer_files)}
-    manifest = {"name": plugin["name"], "version": plugin["version"],
-                "files": {name: digest(data) for name, data in files.items()}}
+    version = windows_version(root)
+    files = dict(package_files(root, include_tests=include_tests))
+    manifest = {
+        "format": 2, "name": "codex-pulse", "version": version, "platform": "windows",
+        "profile": "development" if include_tests else "runtime",
+        "source_revision": clean_revision(root),
+        "files": {name: digest(data) for name, data in files.items()},
+    }
     files["release-manifest.json"] = json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8")
     output.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+    # A new payload gets a new output path; never replace an existing candidate.
+    with output.open("xb") as stream, zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, data in sorted(files.items()):
             entry = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
             entry.compress_type = zipfile.ZIP_DEFLATED
@@ -77,6 +71,15 @@ def verify_archive(path):
                 or not isinstance(manifest.get("files"),dict)
                 or set(names) != set(manifest["files"]) | {"release-manifest.json"}):
             raise ValueError("Package manifest differs from files")
+        if "format" in manifest:
+            revision = manifest.get("source_revision")
+            if (type(manifest["format"]) is not int or manifest["format"] != 2
+                    or manifest.get("platform") != "windows"
+                    or manifest.get("profile") not in ("runtime", "development")
+                    or "source_revision" not in manifest
+                    or revision is not None and (not isinstance(revision, str)
+                        or re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", revision) is None)):
+                raise ValueError("Unsupported package metadata")
         for name, expected in manifest["files"].items():
             if digest(archive.read(name)) != expected:
                 raise ValueError(f"Package checksum mismatch: {name}")

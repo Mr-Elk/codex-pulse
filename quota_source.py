@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import threading
 import hashlib
+from product_version import validate_version, windows_version
 
 
 class QuotaSourceError(Exception):
@@ -17,9 +18,11 @@ class QuotaSourceError(Exception):
 class CodexQuotaSource:
     ALLOWED = {"initialize", "account/read", "account/rateLimits/read"}
 
-    def __init__(self, executable=None, timeout=15):
+    def __init__(self, executable=None, timeout=15, *, client_version=None):
         self.executable = executable
         self.timeout = timeout
+        # Other products pass their own version; the Windows default is plugin.json.
+        self.client_version = validate_version(client_version) if client_version is not None else None
         self.process = None
         self.messages = queue.Queue()
         self.lock = threading.Lock()
@@ -61,12 +64,13 @@ class CodexQuotaSource:
         if self.process is not None and self.process.poll() is None:return
         executable=self.executable or os.environ.get("CODEX_CLI_PATH") or shutil.which("codex.exe") or shutil.which("codex")
         if not executable:raise QuotaSourceError("未找到本机 Codex CLI，请先安装并登录官方客户端")
+        version = self.client_version if self.client_version is not None else windows_version()
         self.messages=queue.Queue()
         self.process=subprocess.Popen([str(executable),"app-server","--stdio"],stdin=subprocess.PIPE,stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,text=True,encoding="utf-8",bufsize=1,
             creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
         threading.Thread(target=self._reader,args=(self.process,self.messages),daemon=True).start()
-        self._request("initialize",{"clientInfo":{"name":"codex_pulse","title":"Codex Pulse","version":"0.7.0-beta.10"},
+        self._request("initialize",{"clientInfo":{"name":"codex_pulse","title":"Codex Pulse","version":version},
                                     "capabilities":{"experimentalApi":True}})
         self.process.stdin.write('{"method":"initialized","params":{}}\n');self.process.stdin.flush()
 

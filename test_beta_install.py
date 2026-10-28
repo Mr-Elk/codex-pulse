@@ -11,6 +11,7 @@ from unittest.mock import patch
 import manage
 from release_tools import build_archive,install_archive
 from runtime_state import read_json
+from test_release_tools import write_fixture_spec
 
 
 class BetaInstallTests(unittest.TestCase):
@@ -18,9 +19,10 @@ class BetaInstallTests(unittest.TestCase):
         source=root/("source-"+version);source.mkdir()
         (source/"plugin.json").write_text(json.dumps({"name":"codex-pulse","version":version}))
         (source/"overlay.py").write_text("version="+repr(version))
-        (source/"test_example.py").write_text("test fixture")
+        (source/"test_example.py").write_text("# test fixture")
         (source/"rollback.ps1").write_text("legacy plugin rollback must not enter portable beta")
         (source/"回退上一版本.cmd").write_text("legacy entry")
+        write_fixture_spec(source, ["overlay.py"], ["test_example.py", "rollback.ps1", "回退上一版本.cmd"])
         archive=root/(version+".zip")
         build_archive(source,archive,include_tests=False)
         return archive
@@ -56,6 +58,18 @@ class BetaInstallTests(unittest.TestCase):
             self.assertEqual((target/"installation.json").read_bytes(),before)
             self.assertEqual(edited.read_text(),"user edit")
 
+    def test_copied_controller_runs_without_the_developer_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / 'standalone'
+            manage.install(self.package(root, '0.6.17'), target)
+            result = subprocess.run(
+                [sys.executable, '-X', 'utf8', '-B', str(target / 'controller/manage.py'),
+                 'status', '--target', str(target)], cwd=target,
+                capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('running', json.loads(result.stdout))
+
     def test_unrelated_target_and_archive_path_escape_are_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);target=root/"notes";target.mkdir();(target/"note.txt").write_text("keep")
@@ -70,7 +84,8 @@ class BetaInstallTests(unittest.TestCase):
         for supervised in (True,False):
             with self.subTest(supervised=supervised),tempfile.TemporaryDirectory() as folder:
                 root=Path(folder);controller=root/'controller';controller.mkdir()
-                shutil.copy2(Path(__file__).with_name('release_tools.py'),controller/'release_tools.py')
+                for name in ('release_tools.py', 'release_policy.py', 'product_version.py'):
+                    shutil.copy2(Path(__file__).with_name(name), controller/name)
                 target=root/'source';target.mkdir()
                 old=b'{"name":"codex-pulse","version":"0.6.17"}'
                 (target/'plugin.json').write_bytes(old)

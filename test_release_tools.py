@@ -8,6 +8,28 @@ import zipfile
 from release_tools import build_archive, digest, install_archive, rollback, verify_archive
 
 
+def write_fixture_spec(source, runtime, development=()):
+    """Prepare a tiny, explicitly declared test payload; no real application data."""
+    version = json.loads((source / "plugin.json").read_text())["version"]
+    for name, text in {
+        "LICENSE": "Test fixture license\n",
+        "README.md": f"# Codex Pulse {version}\n[Guide](BETA_GUIDE.md)\n",
+        "BETA_GUIDE.md": f"版本：{version}。\n",
+        "RELEASE_NOTES.md": f"# {version}\nTest fixture only.\n",
+    }.items():
+        (source / name).write_text(text, encoding="utf-8")
+    (source / "distribution").mkdir(exist_ok=True)
+    spec = {
+        "schema": 1, "platform": "windows", "version_source": "plugin.json",
+        "runtime": sorted(set(runtime) | {"plugin.json", "LICENSE", "README.md",
+                          "BETA_GUIDE.md", "RELEASE_NOTES.md", "distribution/windows-package.json"}),
+        "development": list(development), "optional_runtime": [], "templates": {},
+        "version_documents": {"BETA_GUIDE.md": r"^版本：([^。\s]+)",
+                              "RELEASE_NOTES.md": r"^# ([^\s]+)"},
+    }
+    (source / "distribution/windows-package.json").write_text(json.dumps(spec), encoding="utf-8")
+
+
 class ReleaseTests(unittest.TestCase):
     def test_license_is_carried_through_full_and_runtime_installations(self):
         for include_tests in (True, False):
@@ -29,12 +51,13 @@ class ReleaseTests(unittest.TestCase):
         source = Path(directory) / "source"
         source.mkdir()
         (source / "plugin.json").write_text(json.dumps({"name": "codex-pulse", "version": version}))
-        (source / "overlay.py").write_text("new implementation\n")
-        (source / "new_helper.py").write_text("new helper\n")
+        (source / "overlay.py").write_text("# new implementation\n")
+        (source / "new_helper.py").write_text("# new helper\n")
         (source / "server.log").write_text("local log must not ship")
         (source / "settings.json").write_text("local preferences must not ship")
         (source / "logs_2.sqlite").write_text("local records must not ship")
         (source / ".codex-pulse-local.json").write_text("personal install paths must not ship")
+        write_fixture_spec(source, ["overlay.py", "new_helper.py"])
         return source
 
     def test_package_is_reproducible_and_contains_only_release_files(self):
@@ -45,7 +68,9 @@ class ReleaseTests(unittest.TestCase):
             build_archive(source, first)
             build_archive(source, second)
             self.assertEqual(first.read_bytes(), second.read_bytes())
-            self.assertEqual(set(verify_archive(first)["files"]), {"plugin.json", "overlay.py", "new_helper.py"})
+            self.assertEqual(set(verify_archive(first)["files"]), {
+                "plugin.json", "overlay.py", "new_helper.py", "LICENSE", "README.md",
+                "BETA_GUIDE.md", "RELEASE_NOTES.md", "distribution/windows-package.json"})
 
     def test_install_rollback_roundtrip_preserves_unrelated_files_and_settings(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -60,13 +85,13 @@ class ReleaseTests(unittest.TestCase):
             (target / "overlay.py").write_bytes(b"old implementation\r\n")
             (target / "my_notes.txt").write_text("keep notes")
             (target / "settings.json").write_bytes(b'{"font_size":13,"position":{"gap":24}}')
-            before = {file.name: file.read_bytes() for file in target.iterdir()}
+            before = {file.relative_to(target).as_posix(): file.read_bytes() for file in target.rglob("*") if file.is_file()}
             record = install_archive(archive, target, root / "backups")
             self.assertEqual(json.loads((target / "plugin.json").read_text())["version"], "0.6.0")
             self.assertEqual((target / "settings.json").read_bytes(), before["settings.json"])
-            self.assertEqual(rollback(record, dry_run=True)["files"], 3)
+            self.assertEqual(rollback(record, dry_run=True)["files"], 8)
             rollback(record)
-            self.assertEqual({file.name: file.read_bytes() for file in target.iterdir()}, before)
+            self.assertEqual({file.relative_to(target).as_posix(): file.read_bytes() for file in target.rglob("*") if file.is_file()}, before)
 
     def test_rollback_rejects_later_user_edits_before_writing_anything(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -76,10 +101,10 @@ class ReleaseTests(unittest.TestCase):
             build_archive(source, archive)
             record = install_archive(archive, target, root / "backups")
             (target / "overlay.py").write_text("later user edit")
-            before = {file.name: file.read_bytes() for file in target.iterdir()}
+            before = {file.relative_to(target).as_posix(): file.read_bytes() for file in target.rglob("*") if file.is_file()}
             with self.assertRaisesRegex(ValueError, "changed after upgrade"):
                 rollback(record)
-            self.assertEqual({file.name: file.read_bytes() for file in target.iterdir()}, before)
+            self.assertEqual({file.relative_to(target).as_posix(): file.read_bytes() for file in target.rglob("*") if file.is_file()}, before)
 
     def test_corrupted_package_is_rejected_before_creating_destination(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -103,7 +128,7 @@ class ReleaseTests(unittest.TestCase):
             (target / "plugin.json").write_text('{"name":"codex-pulse","version":"0.5.0"}')
             (target / "overlay.py").write_text("original")
             (target / "keep.txt").write_text("unrelated")
-            before = {file.name: file.read_bytes() for file in target.iterdir()}
+            before = {file.relative_to(target).as_posix(): file.read_bytes() for file in target.rglob("*") if file.is_file()}
             real_write = Path.write_bytes
             failed = []
             # Windows TEMP may use an 8.3 alias; installation resolves its paths.
@@ -116,7 +141,7 @@ class ReleaseTests(unittest.TestCase):
             with patch.object(Path, "write_bytes", new=write), self.assertRaisesRegex(OSError, "simulated"):
                 install_archive(archive, target, root / "backups")
             self.assertEqual(failed, [True])
-            self.assertEqual({file.name: file.read_bytes() for file in target.iterdir()}, before)
+            self.assertEqual({file.relative_to(target).as_posix(): file.read_bytes() for file in target.rglob("*") if file.is_file()}, before)
 
     def test_windows_aliases_and_file_directory_conflicts_are_rejected_before_install(self):
         invalid=(('overlay.py','OVERLAY.py'),('assets/icon.svg','assets/icon.svg.'),

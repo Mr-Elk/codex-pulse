@@ -29,9 +29,9 @@ The beta.11 candidate is local only and has not been uploaded to Releases.
 
 Use the Windows package for normal installation. GitHub's automatically generated Source code ZIP is for development and does not contain the precompiled backdrop DLL. If Python is missing, the installer stops with an explanation; it does not install software for you.
 
-For upgrades, run the new installer with the same installation directory. Preferences live in a separate `data` directory and are preserved. **回退上一版.cmd** (Roll back previous version) restores the retained previous version. A modified version file blocks upgrade/rollback rather than being overwritten. The first installation has no previous version to restore.
+For upgrades, run the new installer with the same installation directory. Preferences live in a separate `data` directory and are preserved. **回退上一版.cmd** (Roll back previous version) restores the retained previous version. A modified version file blocks upgrade/rollback rather than being overwritten. The public beta includes the pinned beta.6 recovery baseline, including for a first installation.
 
-The installer does not enable login startup or change system execution policy. Close any existing strip before launching the standalone beta; the single-instance guard prevents overlapping instances. See the [Chinese beta guide](BETA_GUIDE.md) for additional details.
+The installer does not enable login startup or change system execution policy. Close any existing strip before launching the standalone beta; the single-instance guard prevents overlapping instances. See the [Chinese guide for the public version](https://github.com/Mr-Elk/codex-pulse/blob/v0.7.0-beta.10/BETA_GUIDE.md) for additional details.
 
 ## Features and controls
 
