@@ -1,0 +1,7 @@
+@echo off
+chcp 65001 >nul
+setlocal
+set "pulseTarget=%~1"
+if not defined pulseTarget set "pulseTarget=%LOCALAPPDATA%\CodexPulseCandidates\{{version}}"
+python.exe -X utf8 -B "%~dp0..\tools\acceptance_report.py" --target "%pulseTarget%"
+exit /b %ERRORLEVEL%

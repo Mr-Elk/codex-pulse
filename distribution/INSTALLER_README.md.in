@@ -1,0 +1,16 @@
+# Codex Pulse {{version}} · Windows 本地候选
+
+这是尚未完成实机验收的本地候选，不是公开发行版。主要目标为 Windows 11 x64，需要已有 Python 3.10+（64 位、含 Tkinter）与 Windows PowerShell。
+
+完整解压后运行“安装内测版.cmd”。默认安装到 `%LOCALAPPDATA%\CodexPulseCandidates\{{version}}` 隔离目录。命令行可传入另一个空目录或明确选定的受管测试安装目录；验收期间不要选择日常安装目录。安装完成后，在目标目录运行“启动统计条.cmd”。安装器不自动安装 Python、设置开机启动或修改系统执行策略。
+
+- [环境、日常使用与恢复](BETA_GUIDE.md)
+- [候选变化](RELEASE_NOTES.md)
+- [实机检查和结果填写](acceptance/README.md)
+- [许可证](LICENSE)
+
+包内固定保留校验过的 beta.6 回退基线。在测试目录运行“回退上一版.cmd”，再运行启动入口；重装本候选可返回当前版本。设置和历史数据保存在该安装目录的独立 data 中。
+
+`candidate-manifest.json` 对应完整外壳，内层载荷有自己的 `release-manifest.json`。`build-evidence.json` 记录源码提交、原生 DLL 与工具链、自动检查结果；它不证明真实交互、长测或睡眠唤醒通过。`acceptance/RESULTS.json` 初始所有人工项目均为 `not_run`，完成后另存带包摘要的验收记录，不改写原始 ZIP。
+
+此候选不含 CLI 或 Mac 分发。未签名状态如实记录在构建证据中；本工具不会签名、公证、上传、打标签或创建 Release。

@@ -1,6 +1,6 @@
 # Codex Pulse
 
-Source `main` includes the beta.11 locator memory fix. The public download remains beta.10; beta.11 is a local internal candidate. See [candidate validation](CANDIDATE_VALIDATION.md) for completed checks and remaining limits.
+The source prepares the Windows beta.12 local candidate, retaining the locator memory fix and adding build consistency checks. Public downloads remain beta.10. Beta.12 has not been built or accepted on a Windows desktop; see [candidate preparation](distribution/WINDOWS_CANDIDATE.md). [Historical validation](CANDIDATE_VALIDATION.md) applies only to its original package.
 
 [简体中文](README.md) | English
 
@@ -12,7 +12,7 @@ The application UI is currently in Chinese. UI language switching is planned; th
 
 ![Example usage strip](https://github.com/Mr-Elk/codex-pulse/releases/download/v0.7.0-beta.10/toolbar.png)
 
-The beta.11 candidate is local only and has not been uploaded to Releases.
+The beta.12 candidate is being prepared locally and has not been uploaded to Releases.
 
 ## Codex Desktop and Codex CLI support
 

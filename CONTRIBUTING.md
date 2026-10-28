@@ -122,3 +122,15 @@ python -X utf8 -B ci/check_release.py --require-clean --archive /path/to/windows
 `release_tools.build_archive` 保留原有 `include_tests` 接口，分别选择开发或运行清单；新归档格式记录 `platform`、`profile`、`source_revision`，并拒绝覆盖已有输出。非 Git 或有未提交内容的实验/测试载荷会记录空的来源，不能通过发布归档来源核验。已有旧格式回退包继续使用原校验流程，不要求重写旧资产。测试只在临时目录构造小型夹具包。
 
 该检查不等于完整安装外壳、原生 DLL 构建来源、签名、长期运行或实机界面验收；这些仍须针对实际候选另行验证。Mac/CLI 尚未合入本分支的打包器不由 Windows 门禁代验，已有本地包也不因本次合并而获准发布。
+
+## Windows 完整候选准备
+
+beta.12 的环境、锁定旧包输入、构建/回读命令和待验范围见 [Windows 候选构建说明](distribution/WINDOWS_CANDIDATE.md)。构建入口在干净 Windows 检出中编译原生组件并完成回归，使用新输出目录，默认安装到独立候选目录；不发布或上传。当前新增的 Windows 构建路径仍需在已指定设备上实际执行。
+
+跨平台的候选封装及失败保护检查使用临时夹具，不生成产品候选，也不证明原生 DLL 或真实 UI 通过：
+
+```sh
+python -X utf8 -B -m unittest ci.test_windows_candidate ci.test_ci_runner ci.test_release_consistency test_beta_install test_recovery_install test_release_tools test_acceptance_report -q
+```
+
+`ci/run_windows_tests.py --candidate-receipt` 仅供实际 Windows 候选使用：必须有干净源码及已构建 DLL，回归前后身份保持一致且没有跳过才生成绑定日志摘要的回执。已有普通 CI 命令保持不变。完整包中的人工结果初始均为 `not_run`，按 [实机清单](distribution/ACCEPTANCE.md) 另存真实结果。

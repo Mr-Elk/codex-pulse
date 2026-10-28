@@ -1,0 +1,7 @@
+@echo off
+chcp 65001 >nul
+setlocal
+set "pulseTarget=%~1"
+if not defined pulseTarget set "pulseTarget=%LOCALAPPDATA%\CodexPulseCandidates\{{version}}"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" -InstallRoot "%pulseTarget%"
+exit /b %ERRORLEVEL%

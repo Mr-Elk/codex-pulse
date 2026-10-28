@@ -25,6 +25,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Test release failure scenarios
-        run: python -X utf8 -B -m unittest ci.test_release_consistency test_product_version test_release_tools -v
+        run: python -X utf8 -B -m unittest ci.test_release_consistency ci.test_windows_candidate test_product_version test_release_tools -v
       - name: Check source, payload plans and candidate documents
         run: python -X utf8 -B ci/check_release.py --require-clean
