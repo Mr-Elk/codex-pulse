@@ -72,8 +72,10 @@ python -X utf8 -B ci/run_windows_tests.py --log-dir ci-logs
 环境和回归分别保留 `preflight.log`、`unittest.log`，成功或失败均上传日志；保留子进程退出码，启动失败和超时明确失败。环境检查上限 45 秒、回归上限 900 秒，整个作业上限 20 分钟。运行器本身的跨平台故障检查：
 
 ```sh
-python3 -X utf8 -B -m unittest test_ci_runner -v
+python3 -X utf8 -B -m unittest ci.test_ci_runner -v
 ```
+
+CI 工具和自身测试集中在 `ci/`，由源码仓库的完整回归自动发现；它们不进入现有应用分发清单，避免根目录测试被收集后缺少 CI 依赖。
 
 Actions 固定完整提交 SHA，使用只读权限；外部 PR 仍遵守仓库的运行批准要求。CI 的受控窗口测试不代替真实桌面、目标缩放、截图或异机验收，不触发打包或发布。
 
@@ -82,7 +84,7 @@ Actions 固定完整提交 SHA，使用只读权限；外部 PR 仍遵守仓库�
 需要 Python 3.10+ 和 Git，可在 Windows、macOS 或 Linux 上执行：
 
 ```sh
-python -X utf8 -B -m unittest test_doc_links -v
+python -X utf8 -B -m unittest ci.test_doc_links -v
 python -X utf8 -B ci/check_doc_links.py
 ```
 

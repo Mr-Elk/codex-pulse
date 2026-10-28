@@ -8,7 +8,7 @@ import unittest
 from ci.check_doc_links import check
 
 
-SCRIPT = Path(__file__).with_name("ci") / "check_doc_links.py"
+SCRIPT = Path(__file__).with_name("check_doc_links.py")
 
 
 class DocLinkTests(unittest.TestCase):

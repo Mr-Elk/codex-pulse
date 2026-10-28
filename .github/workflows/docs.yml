@@ -25,6 +25,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Test the link checker
-        run: python -X utf8 -B -m unittest test_doc_links -v
+        run: python -X utf8 -B -m unittest ci.test_doc_links -v
       - name: Check tracked Markdown links
         run: python -X utf8 -B ci/check_doc_links.py
