@@ -106,13 +106,16 @@ class ReleaseTests(unittest.TestCase):
             before = {file.name: file.read_bytes() for file in target.iterdir()}
             real_write = Path.write_bytes
             failed = []
+            # Windows TEMP may use an 8.3 alias; installation resolves its paths.
+            failure_path = (target / "plugin.json").resolve()
             def write(file, data):
-                if file == target / "plugin.json" and not failed:
+                if file == failure_path and not failed:
                     failed.append(True)
                     raise OSError("simulated local write failure")
                 return real_write(file, data)
             with patch.object(Path, "write_bytes", new=write), self.assertRaisesRegex(OSError, "simulated"):
                 install_archive(archive, target, root / "backups")
+            self.assertEqual(failed, [True])
             self.assertEqual({file.name: file.read_bytes() for file in target.iterdir()}, before)
 
     def test_windows_aliases_and_file_directory_conflicts_are_rejected_before_install(self):
