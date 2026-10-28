@@ -59,3 +59,20 @@ python -X utf8 -B -m unittest discover -q
 发布文件使用 release_tools.py 生成并核对 SHA256，包含 LICENSE。DLL、PNG 导出、安装包、截图、缓存与本机数据不提交源码；预编译 DLL 和界面示例作为 Release 附件提供。
 
 请勿在 Issue、提交或附件中包含个人设置、会话数据、原始日志、私有安装指针或凭据。使用示例数据复现问题。
+
+
+## GitHub Actions
+
+Windows 的 `Tests` 工作流在 PR、main 推送及手动触发时使用 Python 3.10 和 3.12。调用 `ci/run_windows_tests.py` 先检查真实 Tk 窗口、Windows 图形库和 Windows PowerShell，再执行上面的完整回归。环境检查失败时停止，不把后续成功步骤覆盖成通过。
+
+```powershell
+python -X utf8 -B ci/run_windows_tests.py --log-dir ci-logs
+```
+
+环境和回归分别保留 `preflight.log`、`unittest.log`，成功或失败均上传日志；保留子进程退出码，启动失败和超时明确失败。环境检查上限 45 秒、回归上限 900 秒，整个作业上限 20 分钟。运行器本身的跨平台故障检查：
+
+```sh
+python3 -X utf8 -B -m unittest test_ci_runner -v
+```
+
+Actions 固定完整提交 SHA，使用只读权限；外部 PR 仍遵守仓库的运行批准要求。CI 的受控窗口测试不代替真实桌面、目标缩放、截图或异机验收，不触发打包或发布。

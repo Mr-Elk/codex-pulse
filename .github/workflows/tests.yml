@@ -22,34 +22,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.10 is the documented minimum; 3.12 is what most users run.
+        # Keep the documented minimum and a second supported interpreter.
         python: ["3.10", "3.12"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python }}
 
-      - name: Check Tkinter is available
-        shell: pwsh
-        run: |
-          python -c "import tkinter; print('tk', tkinter.TkVersion)"
-          python -c "import ctypes; ctypes.WinDLL('user32'); print('user32 ok')"
-
-      - name: Full regression
+      - name: Environment preflight and full regression
         shell: pwsh
         env:
           PYTHONUTF8: "1"
-        run: python -X utf8 -B -m unittest discover -v
+          PYTHONIOENCODING: utf-8
+        run: python -X utf8 -B ci/run_windows_tests.py --log-dir ci-logs
 
-      - name: Upload failure log
-        if: failure()
-        uses: actions/upload-artifact@v4
+      - name: Upload test logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: unittest-log-py${{ matrix.python }}
-          path: |
-            *.log
-          if-no-files-found: ignore
+          name: windows-tests-py${{ matrix.python }}-attempt${{ github.run_attempt }}
+          path: ci-logs/*.log
+          if-no-files-found: error
           retention-days: 7
