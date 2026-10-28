@@ -1,0 +1,55 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unittest:
+    name: Windows/Python ${{ matrix.python }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is the documented minimum; 3.12 is what most users run.
+        python: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Check Tkinter is available
+        shell: pwsh
+        run: |
+          python -c "import tkinter; print('tk', tkinter.TkVersion)"
+          python -c "import ctypes; ctypes.WinDLL('user32'); print('user32 ok')"
+
+      - name: Full regression
+        shell: pwsh
+        env:
+          PYTHONUTF8: "1"
+        run: python -X utf8 -B -m unittest discover -v
+
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unittest-log-py${{ matrix.python }}
+          path: |
+            *.log
+          if-no-files-found: ignore
+          retention-days: 7
